@@ -1,0 +1,88 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: Next.js v15 with TypeScript, Tailwind CSS, Zustand, and Windows 95 UI/UX best practices
+globs: **/*.tsx, **/*.ts, src/**/*.ts, src/**/*.tsx
+---
+# Next.js v15 Win95 Style Best Practices
+
+## Project Structure
+- Use the App Router directory structure
+- Place components in `app` directory for route-specific components
+- Place shared components in `components` directory
+- Place Windows 95 style components in `components/win` directory
+- Place utility Windows components in `components/win/tools` directory
+- Place general UI components in `components/ui` directory
+- Place utilities and helpers in `lib` directory
+- Use lowercase with dashes for directories (e.g., `components/auth-wizard`)
+
+## Components
+- Use Server Components by default
+- Mark client components explicitly with 'use client'
+- Wrap client components in Suspense with fallback
+- Use dynamic loading for non-critical components
+- Implement proper error boundaries
+- Place static content and interfaces at file end
+- Use Windows 95 UI components from `components/win` for consistent styling
+- Implement consistent cursor styles for Windows 95 look and feel
+
+## State Management
+- Use Zustand for global state management
+- Create separate stores for different features
+- Implement proper typing for Zustand stores
+- Use middleware for logging/persistence when needed
+- Keep store logic separate from UI components
+- Implement selectors for optimized component re-renders
+- Create a window management store for Win95 UI
+
+## Windows 95 UI/UX
+- Maintain consistent Windows 95 aesthetic across components
+- Use proper cursor styles for different interactive elements
+- Implement window dragging and resizing behaviors
+- Use appropriate border styles from Tailwind for Win95 look
+- Create reusable window, button, and menu components
+- Implement start menu and taskbar functionality
+- Use appropriate system fonts for authentic Win95 experience
+
+## Tailwind CSS
+- Use Tailwind config to define Win95 color palette
+- Create custom utility classes for Win95-specific styles
+- Maintain consistent border styles for the Win95 look
+- Use Tailwind's JIT mode for optimal performance
+- Implement responsive designs while maintaining Win95 aesthetic
+- Create utility classes for Win95 shadows and effects
+- Use consistent spacing for authentic Win95 layout
+
+## Performance
+- Optimize images: Use WebP format, size data, lazy loading
+- Minimize use of 'useEffect' and 'setState'
+- Favor Server Components (RSC) where possible
+- Use dynamic loading for non-critical components
+- Implement proper caching strategies
+- Optimize window rendering for improved performance
+- Use virtualization for lists and grids
+
+## Data Fetching
+- Use Server Components for data fetching when possible
+- Implement proper error handling for data fetching
+- Use appropriate caching strategies
+- Handle loading and error states appropriately
+- Create consistent loading indicators that match Win95 style
+
+## Routing
+- Use the App Router conventions
+- Implement proper loading and error states for routes
+- Use dynamic routes appropriately
+- Handle parallel routes when needed
+- Consider window-based navigation for Win95 experience
+
+## Forms and Validation
+- Use Zod for form validation
+- Implement proper server-side validation
+- Handle form errors appropriately
+- Show loading states during form submission
+- Style form elements to match Win95 aesthetic
+- Implement proper focus states for form elements
