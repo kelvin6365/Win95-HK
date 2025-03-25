@@ -30,6 +30,8 @@ The application combines the nostalgic elements of Windows 95's interface with n
 ## 📷 Screenshots
 
 <div align="center">
+  <img src="public/init-screen.png" alt="Desktop Screenshot" width="80%" />
+
   <img src="public/demo.png" alt="Desktop Screenshot" width="80%" />
 </div>
 
