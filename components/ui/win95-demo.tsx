@@ -335,8 +335,11 @@ export default function Win95Demo() {
         position: { x, y },
         size,
         title: title || getDefaultTitle(type),
-        filename, // Pass filename for text files
-        folderId, // Pass folder ID for folder windows
+        filename,
+        folderId,
+        minimized: false,
+        maximized: false,
+        component: type,
       });
 
       // Close start menu if it's open
@@ -905,6 +908,9 @@ export default function Win95Demo() {
           position: { x: 80, y: 50 },
           size: { width: 440, height: 320 },
           title: "My Computer",
+          minimized: false,
+          maximized: false,
+          component: "my-computer",
         });
 
         // Set it as the active window
@@ -950,6 +956,9 @@ export default function Win95Demo() {
           title: win.title,
           isMaximized: win.isMinimized,
           folderId: win.currentFolderId,
+          minimized: false,
+          maximized: win.isMinimized || false,
+          component: win.type,
         });
       });
     }
@@ -1293,6 +1302,9 @@ export default function Win95Demo() {
                           position: { x: 80, y: 50 },
                           size: { width: 440, height: 320 },
                           title: "My Computer",
+                          minimized: false,
+                          maximized: false,
+                          component: "my-computer",
                         });
                         handleWindowFocus(windowId);
                         // Ensure visibility flag is set

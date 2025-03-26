@@ -22,7 +22,15 @@ export interface WindowState {
   isActive?: boolean;
   zIndex: number;
   filename?: string; // For text files
-  content?: string; // For text files
+  content?:
+    | {
+        message: string;
+        buttons: Array<{
+          label: string;
+          onClick: () => void;
+        }>;
+      }
+    | string;
   isMaximized?: boolean; // Track if window is maximized
   preMaximizeState?: {
     // Store pre-maximize dimensions and position
@@ -30,6 +38,9 @@ export interface WindowState {
     size: { width: number; height: number };
   };
   folderId?: string; // Add this to support passing a folder ID to the window
+  minimized: boolean;
+  maximized: boolean;
+  component: string;
 }
 
 // Desktop icon interface
@@ -57,7 +68,7 @@ export interface ContextMenuState {
 }
 
 // Store state interface
-interface Win95State {
+export interface Win95State {
   // Window management
   windows: Record<string, WindowState>;
   activeWindowId: string | null;
@@ -142,6 +153,9 @@ interface Win95State {
   pasteItems: (targetFolderId?: string) => void;
 
   lastRightClickCoords: { x: number; y: number };
+
+  // File operations
+  copyItem: (itemId: string, targetFolderId?: string, newName?: string) => void;
 }
 
 // Function to load saved data from localStorage
@@ -795,6 +809,25 @@ export const useWin95Store = create<Win95State>()(
           );
         }
       },
+
+      // File operations
+      copyItem: (itemId: string, targetFolderId?: string, newName?: string) =>
+        set((state) => {
+          const sourceItem = state.desktopIcons[itemId];
+          if (!sourceItem) return state;
+
+          const newId = `${sourceItem.type}-${Date.now()}`;
+          const newDesktopIcons = { ...state.desktopIcons };
+
+          newDesktopIcons[newId] = {
+            ...sourceItem,
+            id: newId,
+            label: newName || sourceItem.label,
+            parentFolderId: targetFolderId,
+          };
+
+          return { desktopIcons: newDesktopIcons };
+        }),
     }),
     {
       name: "win95-storage", // name of the item in localStorage

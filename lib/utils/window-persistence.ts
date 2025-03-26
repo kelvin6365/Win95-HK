@@ -1,5 +1,3 @@
-import { WindowState, WindowType } from "../store";
-
 // Type for window data to be saved in localStorage
 export interface SavedWindowState {
   id: string;

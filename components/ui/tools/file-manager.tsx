@@ -1,30 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
-import { useWin95Store } from "@/lib/store";
+import { DesktopIcon, useWin95Store, WindowType } from "@/lib/store";
+import { useCallback, useEffect, useState } from "react";
 import { TextFileIcon } from "../text-file-icon";
-import { DesktopIcon } from "@/lib/store";
 
 export interface FileManagerProps {
   windowId: string;
   folderId?: string; // Add folder ID to know which folder to display
 }
-
-// Create a simple event emitter to notify all file managers when files are moved
-const fileManagerEvents = {
-  listeners: new Set<
-    (sourceFolderId?: string, targetFolderId?: string) => void
-  >(),
-  subscribe: (
-    listener: (sourceFolderId?: string, targetFolderId?: string) => void
-  ) => {
-    fileManagerEvents.listeners.add(listener);
-    return () => fileManagerEvents.listeners.delete(listener);
-  },
-  notify: (sourceFolderId?: string, targetFolderId?: string) => {
-    fileManagerEvents.listeners.forEach((listener) =>
-      listener(sourceFolderId, targetFolderId)
-    );
-  },
-};
 
 export function FileManager({ windowId, folderId }: FileManagerProps) {
   const {
@@ -34,104 +15,39 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
     moveItemToFolder,
     addWindow,
     setActiveWindow,
+    removeItemFromFolder,
+    closeWindow,
+    copyItem,
   } = useWin95Store();
 
-  // Load initial folder state from localStorage if available
+  // Local state for the folder being viewed
   const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(
-    () => {
-      if (folderId) return folderId;
-      // Try to load saved folder state for this window
-      if (typeof window !== "undefined") {
-        const savedState = localStorage.getItem(
-          `win95_folder_view_${windowId}`
-        );
-        return savedState || undefined;
-      }
-      return undefined;
-    }
+    folderId
   );
-
-  // Save folder state when it changes
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      if (currentFolderId) {
-        localStorage.setItem(`win95_folder_view_${windowId}`, currentFolderId);
-      } else {
-        localStorage.removeItem(`win95_folder_view_${windowId}`);
-      }
-    }
-  }, [currentFolderId, windowId]);
-
-  // Clean up saved state when window is closed
-  useEffect(() => {
-    return () => {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(`win95_folder_view_${windowId}`);
-      }
-    };
-  }, [windowId]);
-
   const [folderItems, setFolderItems] = useState<DesktopIcon[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+
   // Add a key to force re-render
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Function to force a refresh of the current view
   const forceRefresh = useCallback(() => {
-    console.log("Force refreshing folder view for:", currentFolderId);
     setRefreshKey((prev) => prev + 1);
+  }, []);
 
-    // Get the latest contents
-    if (currentFolderId) {
-      const folderContents = getFolderContents(currentFolderId);
-      console.log("Refreshed folder contents:", folderContents);
-      setFolderItems(folderContents);
-    } else {
-      const desktopContents = Object.values(desktopIcons).filter(
-        (icon) => !icon.parentFolderId
+  // Create an event emitter for file manager updates
+  const fileManagerEvents = {
+    notify: (sourceFolderId?: string, targetFolderId?: string) => {
+      window.dispatchEvent(
+        new CustomEvent("folderContentsChanged", {
+          detail: { sourceFolderId, targetFolderId },
+        })
       );
-      console.log("Refreshed desktop contents:", desktopContents);
-      setFolderItems(desktopContents);
-    }
-  }, [currentFolderId, getFolderContents, desktopIcons]);
+    },
+  };
 
-  // Subscribe to global file manager events
+  // Update folder contents when the current folder changes
   useEffect(() => {
-    // Subscribe to events from other file managers
-    const handleFileManagerEvent = (
-      sourceFolderId?: string,
-      targetFolderId?: string
-    ) => {
-      console.log("File manager event received:", {
-        sourceFolderId,
-        targetFolderId,
-        currentFolderId,
-      });
-
-      // Only refresh if we're viewing the source or target folder, or desktop
-      if (
-        !currentFolderId ||
-        currentFolderId === sourceFolderId ||
-        currentFolderId === targetFolderId
-      ) {
-        forceRefresh();
-      }
-    };
-
-    const unsubscribe = fileManagerEvents.subscribe(handleFileManagerEvent);
-    return () => {
-      unsubscribe();
-    };
-  }, [currentFolderId, forceRefresh]);
-
-  // Update folder contents when the current folder changes or when desktopIcons/folderContents change
-  useEffect(() => {
-    console.log("Folder contents effect triggered", {
-      currentFolderId,
-      refreshKey,
-      folderItems: folderItems.map((item) => item.id),
-    });
-
     if (currentFolderId) {
       const folderContents = getFolderContents(currentFolderId);
       setFolderItems(folderContents);
@@ -153,7 +69,7 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
     desktopIcons,
     updateWindowTitle,
     windowId,
-    refreshKey,
+    refreshKey, // Add refreshKey to dependencies to trigger refresh
   ]);
 
   // Handle item selection
@@ -186,11 +102,14 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
       const newWindowId = `window-${Date.now()}`;
       addWindow({
         id: newWindowId,
-        type: "text-file",
+        type: "text-file" as WindowType,
         position: { x: 100, y: 100 },
         size: { width: 400, height: 300 },
         title: fileTitle,
         filename: fileTitle,
+        minimized: false,
+        maximized: false,
+        component: "text-file",
       });
       setActiveWindow(newWindowId);
     }
@@ -252,6 +171,80 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
     if (!itemToMove) return;
 
     try {
+      // Check if a file with the same name exists in the target location
+      const sourceIcon = desktopIcons[itemToMove];
+      const targetItems = targetFolderId
+        ? getFolderContents(targetFolderId)
+        : Object.values(desktopIcons).filter((icon) => !icon.parentFolderId);
+
+      const existingItem = targetItems.find(
+        (item) => item.label === sourceIcon.label
+      );
+
+      if (existingItem) {
+        // Create a window to show the conflict dialog
+        const dialogId = `dialog-${Date.now()}`;
+        addWindow({
+          id: dialogId,
+          type: "default" as WindowType,
+          position: { x: 200, y: 150 },
+          size: { width: 400, height: 150 },
+          title: "File Already Exists",
+          minimized: false,
+          maximized: false,
+          component: "default",
+          content: {
+            message: `A file named "${sourceIcon.label}" already exists in this location.\nDo you want to replace it or create a copy?`,
+            buttons: [
+              {
+                label: "Replace",
+                onClick: () => {
+                  // Remove existing item first
+                  if (targetFolderId) {
+                    removeItemFromFolder(targetFolderId, existingItem.id);
+                  }
+                  // Move the new item
+                  moveItemToFolder(itemToMove, targetFolderId);
+                  // Close dialog
+                  closeWindow(dialogId);
+                },
+              },
+              {
+                label: "Create Copy",
+                onClick: () => {
+                  // Generate a new name with (2), (3), etc.
+                  let newName = sourceIcon.label;
+                  let counter = 2;
+                  const baseName = sourceIcon.label.replace(/\s*\(\d+\)$/, "");
+                  const ext = baseName.includes(".")
+                    ? baseName.substring(baseName.lastIndexOf("."))
+                    : "";
+                  const nameWithoutExt = baseName.replace(ext, "");
+
+                  while (targetItems.some((item) => item.label === newName)) {
+                    newName = `${nameWithoutExt} (${counter})${ext}`;
+                    counter++;
+                  }
+
+                  // Create a copy with the new name
+                  copyItem(itemToMove, targetFolderId, newName);
+                  // Close dialog
+                  closeWindow(dialogId);
+                },
+              },
+              {
+                label: "Cancel",
+                onClick: () => {
+                  closeWindow(dialogId);
+                },
+              },
+            ],
+          },
+        });
+        setActiveWindow(dialogId);
+        return;
+      }
+
       console.log(
         "Moving item:",
         itemToMove,
@@ -304,6 +297,34 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
     setSelectedItems([]);
   };
 
+  // Add event listener for folder contents changes
+  useEffect(() => {
+    const handleFolderUpdate = (e: CustomEvent) => {
+      const { sourceFolderId, targetFolderId } = e.detail;
+
+      // Update contents if this FileManager is showing either the source or target folder
+      if (
+        currentFolderId === sourceFolderId ||
+        currentFolderId === targetFolderId
+      ) {
+        if (currentFolderId) {
+          setFolderItems(getFolderContents(currentFolderId));
+        }
+      }
+    };
+
+    window.addEventListener(
+      "folderContentsChanged",
+      handleFolderUpdate as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        "folderContentsChanged",
+        handleFolderUpdate as EventListener
+      );
+    };
+  }, [currentFolderId]);
+
   return (
     <div className="h-full flex flex-col">
       <div className="bg-[var(--win95-bg)] border-b border-[var(--win95-border-dark)] p-1 text-xs">
@@ -334,9 +355,6 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
         onDrop={(e) => {
           if (currentFolderId) {
             handleDrop(e, currentFolderId);
-          } else {
-            // When dropping on desktop view, pass undefined as targetFolderId
-            handleDrop(e, undefined);
           }
         }}
         onClick={(e) => {
