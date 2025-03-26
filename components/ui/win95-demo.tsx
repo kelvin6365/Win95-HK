@@ -36,6 +36,7 @@ import { useWin95Store, WindowType, DesktopIcon } from "@/lib/store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Wallpaper } from "./wallpaper";
 import { cn } from "../../lib/utils";
+import { getDefaultWindowSize } from "@/lib/utils/windows";
 
 export default function Win95Demo() {
   // State to track if the system is ready
@@ -215,6 +216,7 @@ export default function Win95Demo() {
   const getWindowContent = useCallback(
     (type: WindowType, windowId: string, filename?: string) => {
       const { updateWindowTitle } = useWin95Store.getState();
+      const window = windows[windowId];
 
       switch (type) {
         case "notepad":
@@ -230,7 +232,7 @@ export default function Win95Demo() {
         case "calculator":
           return <Calculator windowId={windowId} />;
         case "explorer":
-          return <MyComputer windowId={windowId} />; // Use MyComputer for both explorer and my-computer
+          return <FileManager windowId={windowId} folderId={window.folderId} />;
         case "paint":
           return (
             <Paint
@@ -240,7 +242,7 @@ export default function Win95Demo() {
             />
           );
         case "filemanager":
-          return <FileManager windowId={windowId} />;
+          return <FileManager windowId={windowId} folderId={window.folderId} />;
         case "text-file":
           return (
             <Notepad
@@ -303,7 +305,12 @@ export default function Win95Demo() {
 
   // Create a new window
   const createWindow = useCallback(
-    (type: WindowType, title?: string, filename?: string) => {
+    (
+      type: WindowType,
+      title?: string,
+      filename?: string,
+      folderId?: string
+    ) => {
       const id =
         type === "default"
           ? `default-window-${Date.now()}`
@@ -314,16 +321,7 @@ export default function Win95Demo() {
       const y = 50 + Math.floor(Math.random() * 100);
 
       // Set appropriate size based on window type
-      let size = { width: 440, height: 320 };
-      if (type === "notepad" || type === "text-file") {
-        size = { width: 480, height: 360 };
-      } else if (type === "calculator") {
-        size = { width: 220, height: 280 };
-      } else if (type === "explorer") {
-        size = { width: 520, height: 400 };
-      } else if (type === "paint") {
-        size = { width: 600, height: 450 };
-      }
+      const size = getDefaultWindowSize(type);
 
       // Add window to store
       addWindow({
@@ -333,6 +331,7 @@ export default function Win95Demo() {
         size,
         title: title || getDefaultTitle(type),
         filename, // Pass filename for text files
+        folderId, // Pass folder ID for folder windows
       });
 
       // Close start menu if it's open
@@ -433,7 +432,9 @@ export default function Win95Demo() {
 
       // Get the icon being dragged
       const iconId = e.dataTransfer.getData("desktop-icon");
-      if (!iconId || !desktopRef.current) return;
+      const fileItemId = e.dataTransfer.getData("file-item");
+
+      if ((!iconId && !fileItemId) || !desktopRef.current) return;
 
       // Reset styles on all desktop icons that were dragged
       const icons = document.querySelectorAll('[data-was-dragging="true"]');
@@ -459,37 +460,90 @@ export default function Win95Demo() {
         y = Math.min(y, rect.height - 80); // Icon height approx 80px
       }
 
-      // Move all selected icons if we're dragging a selected icon
-      if (selectedDesktopIcons.includes(iconId)) {
-        // Calculate the offset from the dragged icon to the drop position
-        const draggedIcon = desktopIcons[iconId];
-        const offsetX = x - draggedIcon.x;
-        const offsetY = y - draggedIcon.y;
+      // Check if we're dropping on a folder
+      const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+      const folderIconElement = dropTarget?.closest("[data-icon-id]");
+      const folderIconId = folderIconElement?.getAttribute("data-icon-id");
 
-        // Update all selected icons positions
-        selectedDesktopIcons.forEach((id) => {
-          if (id !== iconId) {
-            const icon = desktopIcons[id];
-            let newX = icon.x + offsetX;
-            let newY = icon.y + offsetY;
+      if (folderIconId && desktopIcons[folderIconId]?.type === "folder") {
+        // We're dropping onto a folder
+        console.log(`Dropping onto folder: ${folderIconId}`);
 
-            // Ensure within bounds
-            if (rect.width && rect.height) {
-              newX = Math.min(newX, rect.width - 80);
-              newY = Math.min(newY, rect.height - 80);
-              newX = Math.max(0, newX);
-              newY = Math.max(0, newY);
-            }
+        // Get the Zustand store functions directly to avoid stale closures
+        const { moveItemToFolder } = useWin95Store.getState();
 
-            updateDesktopIconPosition(id, { x: newX, y: newY });
+        if (iconId) {
+          // Move the dragged icon to this folder
+          moveItemToFolder(iconId, folderIconId);
+
+          // If multiple icons were selected, move them all
+          if (selectedDesktopIcons.includes(iconId)) {
+            selectedDesktopIcons.forEach((id) => {
+              if (id !== iconId) {
+                moveItemToFolder(id, folderIconId);
+              }
+            });
           }
-        });
+
+          // Play a sound or provide feedback
+          // ...
+
+          return; // Exit early since we're handling this as a folder drop
+        } else if (fileItemId) {
+          // Handle file item being dropped from a file manager window
+          moveItemToFolder(fileItemId, folderIconId);
+          return;
+        }
       }
 
-      // Update the dragged icon position
-      updateDesktopIconPosition(iconId, { x, y });
+      // If we're here, this is a drop onto the desktop (not a folder)
 
-      // Play the Windows 95 move sound (if we had it)
+      // Handle dragging from file manager to desktop (remove from folder)
+      if (fileItemId) {
+        const { removeItemFromFolder } = useWin95Store.getState();
+        const item = desktopIcons[fileItemId];
+
+        if (item && item.parentFolderId) {
+          removeItemFromFolder(item.parentFolderId, fileItemId);
+        }
+
+        // Update the position on the desktop
+        updateDesktopIconPosition(fileItemId, { x, y });
+        return;
+      }
+
+      // Regular desktop icon moving (existing functionality)
+      if (iconId) {
+        // Move all selected icons if we're dragging a selected icon
+        if (selectedDesktopIcons.includes(iconId)) {
+          // Calculate the offset from the dragged icon to the drop position
+          const draggedIcon = desktopIcons[iconId];
+          const offsetX = x - draggedIcon.x;
+          const offsetY = y - draggedIcon.y;
+
+          // Update all selected icons positions
+          selectedDesktopIcons.forEach((id) => {
+            if (id !== iconId) {
+              const icon = desktopIcons[id];
+              let newX = icon.x + offsetX;
+              let newY = icon.y + offsetY;
+
+              // Ensure within bounds
+              if (rect.width && rect.height) {
+                newX = Math.min(newX, rect.width - 80);
+                newY = Math.min(newY, rect.height - 80);
+                newX = Math.max(0, newX);
+                newY = Math.max(0, newY);
+              }
+
+              updateDesktopIconPosition(id, { x: newX, y: newY });
+            }
+          });
+        }
+
+        // Update the dragged icon position
+        updateDesktopIconPosition(iconId, { x, y });
+      }
     },
     [GRID_SIZE, desktopIcons, selectedDesktopIcons, updateDesktopIconPosition]
   );
@@ -663,12 +717,18 @@ export default function Win95Demo() {
         // Open text files in Notepad
         const fileTitle = icon.label;
         console.log(`Opening text file: ${fileTitle}`);
-        const windowId = createWindow("text-file", fileTitle);
+        // Pass fileTitle as both title and filename to properly load saved content
+        const windowId = createWindow("text-file", fileTitle, fileTitle);
         setActiveWindow(windowId);
       } else if (icon.type === "folder") {
         // Open folder in Explorer
         console.log(`Opening folder: ${icon.label}`);
-        const windowId = createWindow("explorer", icon.label);
+        const windowId = createWindow(
+          "explorer",
+          icon.label,
+          undefined,
+          iconId
+        );
         setActiveWindow(windowId);
       }
     },
@@ -830,105 +890,107 @@ export default function Win95Demo() {
               <style jsx>{desktopIconStyles}</style>
 
               {/* Render desktop icons */}
-              {Object.entries(desktopIcons).map(([id, icon]) => (
-                <div
-                  key={id}
-                  data-icon-id={id}
-                  className={`absolute w-[70px] flex flex-col items-center justify-start ${
-                    selectedDesktopIcons.includes(id)
-                      ? "bg-[#000080] text-white"
-                      : "text-white"
-                  }`}
-                  style={{
-                    left: `${icon.x}px`,
-                    top: `${icon.y}px`,
-                    cursor: "pointer",
-                    padding: "2px",
-                    height: "64px",
-                  }}
-                  onClick={(e) => handleDesktopIconClick(e, id)}
-                  onDoubleClick={() => handleDesktopIconDoubleClick(id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setContextMenu({
-                      show: true,
-                      x: e.clientX,
-                      y: e.clientY,
-                      type: "desktop-icon",
-                      itemId: id,
-                    });
-                    selectDesktopIcon(id);
-                  }}
-                  draggable
-                  onDragStart={(e) => handleDesktopIconDragStart(e, id)}
-                  onDragEnd={handleDesktopDragEnd}
-                >
-                  <div className="w-8 h-8 flex items-center justify-center mb-1 mx-auto">
-                    {id === "myComputer" && (
-                      <svg width="32" height="32" viewBox="0 0 24 24">
-                        <rect
-                          x="2"
-                          y="3"
-                          width="20"
-                          height="15"
-                          fill="#fcf481"
-                          stroke="#000"
-                        />
-                        <rect
-                          x="5"
-                          y="6"
-                          width="14"
-                          height="9"
-                          fill="#fff"
-                          stroke="#000"
-                        />
-                        <rect
-                          x="9"
-                          y="18"
-                          width="6"
-                          height="3"
-                          fill="#c0c0c0"
-                          stroke="#000"
-                        />
-                      </svg>
-                    )}
-                    {icon.type === "text-file" && <TextFileIcon size="lg" />}
-                    {icon.type === "folder" && (
-                      <svg width="32" height="32" viewBox="0 0 24 24">
-                        <path
-                          d="M2,5 L9,5 L11,7 L22,7 L22,20 L2,20 Z"
-                          fill="#fceb74"
-                          stroke="#000"
-                          strokeWidth="1"
-                        />
-                        <path
-                          d="M2,5 L2,20 L22,20 L22,7 L11,7 L9,5 Z"
-                          fill="none"
-                          stroke="#000"
-                          strokeWidth="1"
-                        />
-                      </svg>
-                    )}
-                  </div>
+              {Object.entries(desktopIcons)
+                .filter(([, icon]) => !icon.parentFolderId) // Only show items not inside a folder
+                .map(([id, icon]) => (
                   <div
-                    className={`text-xs w-full px-1 py-[1px] truncate text-center leading-tight ${
+                    key={id}
+                    data-icon-id={id}
+                    className={`absolute w-[70px] flex flex-col items-center justify-start ${
                       selectedDesktopIcons.includes(id)
-                        ? "border border-dotted border-white"
-                        : ""
+                        ? "bg-[#000080] text-white"
+                        : "text-white"
                     }`}
                     style={{
-                      textShadow: "1px 1px 1px rgba(0,0,0,0.8)",
-                      fontFamily: "var(--win95-font)",
-                      wordBreak: "break-word",
-                      maxHeight: "28px",
-                      overflow: "hidden",
+                      left: `${icon.x}px`,
+                      top: `${icon.y}px`,
+                      cursor: "pointer",
+                      padding: "2px",
+                      height: "64px",
                     }}
+                    onClick={(e) => handleDesktopIconClick(e, id)}
+                    onDoubleClick={() => handleDesktopIconDoubleClick(id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setContextMenu({
+                        show: true,
+                        x: e.clientX,
+                        y: e.clientY,
+                        type: "desktop-icon",
+                        itemId: id,
+                      });
+                      selectDesktopIcon(id);
+                    }}
+                    draggable
+                    onDragStart={(e) => handleDesktopIconDragStart(e, id)}
+                    onDragEnd={handleDesktopDragEnd}
                   >
-                    {icon.label}
+                    <div className="w-8 h-8 flex items-center justify-center mb-1 mx-auto">
+                      {id === "myComputer" && (
+                        <svg width="32" height="32" viewBox="0 0 24 24">
+                          <rect
+                            x="2"
+                            y="3"
+                            width="20"
+                            height="15"
+                            fill="#fcf481"
+                            stroke="#000"
+                          />
+                          <rect
+                            x="5"
+                            y="6"
+                            width="14"
+                            height="9"
+                            fill="#fff"
+                            stroke="#000"
+                          />
+                          <rect
+                            x="9"
+                            y="18"
+                            width="6"
+                            height="3"
+                            fill="#c0c0c0"
+                            stroke="#000"
+                          />
+                        </svg>
+                      )}
+                      {icon.type === "text-file" && <TextFileIcon size="lg" />}
+                      {icon.type === "folder" && (
+                        <svg width="32" height="32" viewBox="0 0 24 24">
+                          <path
+                            d="M2,5 L9,5 L11,7 L22,7 L22,20 L2,20 Z"
+                            fill="#fceb74"
+                            stroke="#000"
+                            strokeWidth="1"
+                          />
+                          <path
+                            d="M2,5 L2,20 L22,20 L22,7 L11,7 L9,5 Z"
+                            fill="none"
+                            stroke="#000"
+                            strokeWidth="1"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div
+                      className={`text-xs w-full px-1 py-[1px] truncate text-center leading-tight ${
+                        selectedDesktopIcons.includes(id)
+                          ? "border border-dotted border-white"
+                          : ""
+                      }`}
+                      style={{
+                        textShadow: "1px 1px 1px rgba(0,0,0,0.8)",
+                        fontFamily: "var(--win95-font)",
+                        wordBreak: "break-word",
+                        maxHeight: "28px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {icon.label}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
 
               {/* Windows */}
               {Object.entries(windows).map(([id, window]) => {

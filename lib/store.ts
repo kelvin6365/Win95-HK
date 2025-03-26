@@ -29,6 +29,7 @@ export interface WindowState {
     position: { x: number; y: number };
     size: { width: number; height: number };
   };
+  folderId?: string; // Add this to support passing a folder ID to the window
 }
 
 // Desktop icon interface
@@ -37,7 +38,9 @@ export interface DesktopIcon {
   x: number;
   y: number;
   label: string;
-  type?: string;
+  type: string;
+  parentFolderId?: string; // Parent folder ID for nested items
+  contents?: string[]; // IDs of items contained in this folder
   onDoubleClick?: () => void;
 }
 
@@ -116,16 +119,47 @@ interface Win95State {
       size: { width: number; height: number };
     }
   ) => void;
+
+  folderContents: Record<string, string[]>; // Map folder IDs to arrays of item IDs
+
+  // Add folder-related actions
+  addItemToFolder: (folderId: string, itemId: string) => void;
+  removeItemFromFolder: (folderId: string, itemId: string) => void;
+  moveItemToFolder: (itemId: string, targetFolderId: string) => void;
+  getFolderContents: (folderId: string) => DesktopIcon[];
 }
+
+// Function to load saved data from localStorage
+const loadSavedData = () => {
+  if (typeof window === "undefined") return null; // Skip on server-side
+
+  try {
+    const savedDesktopIcons = localStorage.getItem("win95_desktop_icons");
+    const savedFolderContents = localStorage.getItem("win95_folder_contents");
+
+    return {
+      desktopIcons: savedDesktopIcons ? JSON.parse(savedDesktopIcons) : null,
+      folderContents: savedFolderContents
+        ? JSON.parse(savedFolderContents)
+        : null,
+    };
+  } catch (error) {
+    console.error("Error loading saved data:", error);
+    return null;
+  }
+};
+
+// Get initial data from localStorage or use defaults
+const savedData = loadSavedData();
 
 export const useWin95Store = create<Win95State>()(
   persist(
     (set, get) => ({
-      // Initial state
+      // Initialize state, using localStorage data if available
       windows: {},
       activeWindowId: null,
       nextZIndex: 1,
-      desktopIcons: {
+      desktopIcons: savedData?.desktopIcons || {
         myComputer: {
           id: "myComputer",
           x: 24,
@@ -135,7 +169,7 @@ export const useWin95Store = create<Win95State>()(
         },
       },
       selectedDesktopIcons: [],
-      isMyComputerVisible: true,
+      isMyComputerVisible: false,
       isTaskbarOpen: false,
       contextMenu: {
         show: false,
@@ -143,6 +177,7 @@ export const useWin95Store = create<Win95State>()(
         y: 0,
         type: "desktop",
       },
+      folderContents: savedData?.folderContents || {},
       currentTime: "",
 
       // Actions
@@ -284,25 +319,53 @@ export const useWin95Store = create<Win95State>()(
 
       // Desktop icon actions
       addDesktopIcon: (icon) => {
-        set((state) => ({
-          desktopIcons: {
+        set((state) => {
+          const updatedIcons = {
             ...state.desktopIcons,
             [icon.id]: icon,
-          },
-        }));
+          };
+
+          // Save to localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "win95_desktop_icons",
+              JSON.stringify(updatedIcons)
+            );
+          }
+
+          return {
+            ...state,
+            desktopIcons: updatedIcons,
+          };
+        });
       },
 
       updateDesktopIconPosition: (id, position) => {
-        set((state) => ({
-          desktopIcons: {
+        set((state) => {
+          if (!state.desktopIcons[id]) return state;
+
+          const updatedIcons = {
             ...state.desktopIcons,
             [id]: {
               ...state.desktopIcons[id],
               x: position.x,
               y: position.y,
             },
-          },
-        }));
+          };
+
+          // Save to localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "win95_desktop_icons",
+              JSON.stringify(updatedIcons)
+            );
+          }
+
+          return {
+            ...state,
+            desktopIcons: updatedIcons,
+          };
+        });
       },
 
       selectDesktopIcon: (id, isMultiSelect = false) => {
@@ -351,6 +414,159 @@ export const useWin95Store = create<Win95State>()(
             },
           },
         }));
+      },
+
+      // Implement folder-related actions
+      addItemToFolder: (folderId: string, itemId: string) => {
+        set((state) => {
+          // Check if folder exists
+          if (!state.desktopIcons[folderId]) return state;
+
+          // Check if the folder already contains the item
+          const currentContents = state.folderContents[folderId] || [];
+          if (currentContents.includes(itemId)) return state;
+
+          // Update parent reference on the item
+          const updatedDesktopIcons = {
+            ...state.desktopIcons,
+            [itemId]: {
+              ...state.desktopIcons[itemId],
+              parentFolderId: folderId,
+            },
+          };
+
+          const updatedFolderContents = {
+            ...state.folderContents,
+            [folderId]: [...currentContents, itemId],
+          };
+
+          // Save to localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "win95_desktop_icons",
+              JSON.stringify(updatedDesktopIcons)
+            );
+            localStorage.setItem(
+              "win95_folder_contents",
+              JSON.stringify(updatedFolderContents)
+            );
+          }
+
+          return {
+            ...state,
+            desktopIcons: updatedDesktopIcons,
+            folderContents: updatedFolderContents,
+          };
+        });
+      },
+
+      removeItemFromFolder: (folderId: string, itemId: string) => {
+        set((state) => {
+          // Check if folder exists
+          if (!state.folderContents[folderId]) return state;
+
+          // Remove parent reference from the item
+          const updatedDesktopIcons = {
+            ...state.desktopIcons,
+            [itemId]: {
+              ...state.desktopIcons[itemId],
+              parentFolderId: undefined,
+            },
+          };
+
+          // Update folder contents
+          const updatedContents = state.folderContents[folderId].filter(
+            (id) => id !== itemId
+          );
+
+          const updatedFolderContents = {
+            ...state.folderContents,
+            [folderId]: updatedContents,
+          };
+
+          // Save to localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "win95_desktop_icons",
+              JSON.stringify(updatedDesktopIcons)
+            );
+            localStorage.setItem(
+              "win95_folder_contents",
+              JSON.stringify(updatedFolderContents)
+            );
+          }
+
+          return {
+            ...state,
+            desktopIcons: updatedDesktopIcons,
+            folderContents: updatedFolderContents,
+          };
+        });
+      },
+
+      moveItemToFolder: (itemId: string, targetFolderId: string) => {
+        set((state) => {
+          const item = state.desktopIcons[itemId];
+          if (!item) return state;
+
+          // If the item is already in a folder, remove it first
+          let updatedState = { ...state };
+          if (item.parentFolderId) {
+            const currentContents =
+              state.folderContents[item.parentFolderId] || [];
+            updatedState = {
+              ...state,
+              folderContents: {
+                ...state.folderContents,
+                [item.parentFolderId]: currentContents.filter(
+                  (id) => id !== itemId
+                ),
+              },
+            };
+          }
+
+          // Now add the item to the target folder
+          const targetContents =
+            updatedState.folderContents[targetFolderId] || [];
+
+          // Update the item's parent reference
+          const updatedDesktopIcons = {
+            ...updatedState.desktopIcons,
+            [itemId]: {
+              ...updatedState.desktopIcons[itemId],
+              parentFolderId: targetFolderId,
+            },
+          };
+
+          const updatedFolderContents = {
+            ...updatedState.folderContents,
+            [targetFolderId]: [...targetContents, itemId],
+          };
+
+          // Save to localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "win95_desktop_icons",
+              JSON.stringify(updatedDesktopIcons)
+            );
+            localStorage.setItem(
+              "win95_folder_contents",
+              JSON.stringify(updatedFolderContents)
+            );
+          }
+
+          return {
+            ...updatedState,
+            desktopIcons: updatedDesktopIcons,
+            folderContents: updatedFolderContents,
+          };
+        });
+      },
+
+      getFolderContents: (folderId: string) => {
+        const state = get();
+        const contentIds = state.folderContents[folderId] || [];
+        return contentIds.map((id) => state.desktopIcons[id]).filter(Boolean);
       },
     }),
     {

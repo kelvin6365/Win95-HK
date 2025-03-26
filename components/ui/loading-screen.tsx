@@ -78,7 +78,15 @@ export function Win95LoadingScreen({ onComplete }: LoadingScreenProps) {
 
         {/* Copyright */}
         <div className="text-white text-xs text-center mt-8">
-          © 1995 Microsoft Corporation. All rights reserved.
+          © 1995 Mxxxxxxx Corporation. All rights reserved.
+        </div>
+
+        {/* Made love by @kelvin6365 */}
+        <div className="text-white text-xs text-center mt-8">
+          Made love by{" "}
+          <a href="https://github.com/kelvin6365" className="underline">
+            kelvin6365
+          </a>
         </div>
       </div>
     </div>

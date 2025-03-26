@@ -53,7 +53,7 @@ export function getDefaultWindowSize(type: WindowType): {
     case "text-file":
       return { width: 480, height: 360 };
     case "calculator":
-      return { width: 220, height: 280 };
+      return { width: 260, height: 320 };
     case "explorer":
     case "my-computer":
       return { width: 440, height: 320 };
