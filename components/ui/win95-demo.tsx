@@ -37,6 +37,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Wallpaper } from "./wallpaper";
 import { cn } from "../../lib/utils";
 import { getDefaultWindowSize } from "@/lib/utils/windows";
+import {
+  saveWindowState,
+  loadSavedWindowState,
+  SavedWindowState,
+} from "@/lib/utils/window-persistence";
 
 export default function Win95Demo() {
   // State to track if the system is ready
@@ -798,10 +803,58 @@ export default function Win95Demo() {
       // Handle actions
       switch (action) {
         case "open":
-          if (itemId === "myComputer") {
-            handleDesktopIconDoubleClick("myComputer");
+          if (itemId) {
+            const item = desktopIcons[itemId];
+            if (!item) return;
+
+            if (itemId === "myComputer") {
+              handleDesktopIconDoubleClick("myComputer");
+            } else if (item.type === "folder") {
+              // Open folder in Explorer
+              console.log(`Opening folder: ${item.label}`);
+              const windowId = createWindow(
+                "explorer",
+                item.label,
+                undefined,
+                itemId
+              );
+              setActiveWindow(windowId);
+            } else if (item.type === "text-file") {
+              // Open text file in Notepad
+              const fileTitle = item.label;
+              console.log(`Opening text file: ${fileTitle}`);
+              const windowId = createWindow("text-file", fileTitle, fileTitle);
+              setActiveWindow(windowId);
+            }
           }
           break;
+
+        case "copy":
+          if (itemId) {
+            // If multiple items are selected and we're copying one of them,
+            // copy all selected items
+            const itemsToCopy = selectedDesktopIcons.includes(itemId)
+              ? selectedDesktopIcons
+              : [itemId];
+
+            console.log("Copying items to clipboard:", itemsToCopy);
+            useWin95Store.getState().setClipboard("copy", itemsToCopy);
+          }
+          break;
+
+        case "paste":
+          // When pasting on desktop, pass undefined as targetFolderId
+          console.log("Pasting items to desktop");
+          useWin95Store.getState().pasteItems(undefined);
+          break;
+
+        case "paste-to-folder":
+          if (itemId) {
+            console.log("Pasting items to folder:", itemId);
+            useWin95Store.getState().pasteItems(itemId);
+          }
+          break;
+
         case "explore":
           // Handle explore action
           break;
@@ -824,7 +877,15 @@ export default function Win95Demo() {
           break;
       }
     },
-    [lineUpIcons, handleDesktopIconDoubleClick, createNewFolder]
+    [
+      lineUpIcons,
+      handleDesktopIconDoubleClick,
+      createNewFolder,
+      desktopIcons,
+      createWindow,
+      setActiveWindow,
+      selectedDesktopIcons,
+    ]
   );
 
   // Create the My Computer window at startup if needed
@@ -852,6 +913,48 @@ export default function Win95Demo() {
     }
   }, [isSystemReady, isMyComputerVisible, windows, addWindow, setActiveWindow]);
 
+  // Save window state before unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const windowsToSave = Object.entries(windows).map(([id, win]) => ({
+        id,
+        type: win.type,
+        title: win.title,
+        position: win.position,
+        size: win.size || { width: 400, height: 300 },
+        isMinimized: win.isMaximized,
+        currentFolderId:
+          win.type === "filemanager"
+            ? localStorage.getItem(`win95_folder_view_${id}`) || undefined
+            : undefined,
+      }));
+      saveWindowState(windowsToSave);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [windows]);
+
+  // Load saved window state on startup
+  useEffect(() => {
+    if (!isSystemReady) return;
+
+    const savedWindows = loadSavedWindowState();
+    if (savedWindows.length > 0) {
+      savedWindows.forEach((win: SavedWindowState) => {
+        addWindow({
+          id: win.id,
+          type: win.type as WindowType,
+          position: win.position,
+          size: win.size,
+          title: win.title,
+          isMaximized: win.isMinimized,
+          folderId: win.currentFolderId,
+        });
+      });
+    }
+  }, [isSystemReady, addWindow]);
+
   return (
     <div className="relative overflow-hidden w-full h-full">
       {!isSystemReady && isFirstVisit && (
@@ -876,12 +979,22 @@ export default function Win95Demo() {
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setContextMenu({
-                  show: true,
-                  x: e.clientX,
-                  y: e.clientY,
-                  type: "desktop",
-                });
+                const rect = desktopRef.current?.getBoundingClientRect();
+                if (rect) {
+                  // Calculate coordinates relative to desktop
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  console.log("Setting context menu at desktop coordinates:", {
+                    x,
+                    y,
+                  });
+                  setContextMenu({
+                    show: true,
+                    x,
+                    y,
+                    type: "desktop",
+                  });
+                }
               }}
               onDragOver={handleDesktopDragOver}
               onDrop={handleDesktopDrop}
@@ -913,14 +1026,20 @@ export default function Win95Demo() {
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setContextMenu({
-                        show: true,
-                        x: e.clientX,
-                        y: e.clientY,
-                        type: "desktop-icon",
-                        itemId: id,
-                      });
-                      selectDesktopIcon(id);
+                      const rect = desktopRef.current?.getBoundingClientRect();
+                      if (rect) {
+                        const x = e.clientX - rect.left;
+                        const y = e.clientY - rect.top;
+                        console.log("Setting icon context menu at:", { x, y });
+                        setContextMenu({
+                          show: true,
+                          x,
+                          y,
+                          type: "desktop-icon",
+                          itemId: id,
+                        });
+                        selectDesktopIcon(id);
+                      }
                     }}
                     draggable
                     onDragStart={(e) => handleDesktopIconDragStart(e, id)}
@@ -1208,8 +1327,8 @@ export default function Win95Demo() {
                 console.log("Context menu closing from onClose prop");
                 setContextMenu({
                   show: false,
-                  x: 0,
-                  y: 0,
+                  x: contextMenu.x,
+                  y: contextMenu.y,
                   type: "desktop",
                 });
               }}
@@ -1217,7 +1336,6 @@ export default function Win95Demo() {
                 console.log("🎯 Action called:", action);
                 handleStartMenuAction(action, itemId);
               }}
-              createWindow={createWindow}
             />
           </div>
         </Wallpaper>

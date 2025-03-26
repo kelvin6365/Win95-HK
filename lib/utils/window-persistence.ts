@@ -1,44 +1,22 @@
 import { WindowState, WindowType } from "../store";
 
 // Type for window data to be saved in localStorage
-interface SavedWindowState {
-  id?: string;
-  type: WindowType;
-  title: string;
+export interface SavedWindowState {
+  id: string;
+  type: string;
   position: { x: number; y: number };
-  size?: { width: number; height: number };
-  filename?: string;
-  folderId?: string;
-  wasActive?: boolean;
+  size: { width: number; height: number };
+  title: string;
+  isMinimized?: boolean;
+  currentFolderId?: string;
 }
 
 /**
  * Save current window state to localStorage
  */
-export function saveWindowState(
-  windows: Record<string, WindowState>,
-  activeWindowId: string | null
-) {
+export function saveWindowState(windows: SavedWindowState[]) {
   if (typeof window === "undefined") return;
-
-  try {
-    // Convert windows to a simpler format for storage
-    const windowsToSave = Object.entries(windows).map(([id, win]) => ({
-      id,
-      type: win.type,
-      title: win.title,
-      position: win.position,
-      size: win.size,
-      filename: win.filename,
-      folderId: win.folderId,
-      wasActive: id === activeWindowId,
-    }));
-
-    // Save to localStorage
-    localStorage.setItem("win95_open_windows", JSON.stringify(windowsToSave));
-  } catch (error) {
-    console.error("Error saving window state:", error);
-  }
+  localStorage.setItem("win95_window_state", JSON.stringify(windows));
 }
 
 /**
@@ -48,12 +26,18 @@ export function loadSavedWindowState(): SavedWindowState[] {
   if (typeof window === "undefined") return [];
 
   try {
-    const savedData = localStorage.getItem("win95_open_windows");
-    if (!savedData) return [];
+    const savedState = localStorage.getItem("win95_window_state");
+    if (!savedState) return [];
 
-    return JSON.parse(savedData) as SavedWindowState[];
+    const windows = JSON.parse(savedState) as SavedWindowState[];
+
+    // Migrate old window states that don't have currentFolderId
+    return windows.map((win) => ({
+      ...win,
+      currentFolderId: win.currentFolderId || undefined,
+    }));
   } catch (error) {
-    console.error("Error loading saved window state:", error);
+    console.error("Error loading window state:", error);
     return [];
   }
 }
@@ -65,7 +49,7 @@ export function clearSavedWindowState() {
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.removeItem("win95_open_windows");
+    localStorage.removeItem("win95_window_state");
   } catch (error) {
     console.error("Error clearing window state:", error);
   }

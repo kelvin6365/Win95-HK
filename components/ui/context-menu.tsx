@@ -1,6 +1,6 @@
 "use client";
 
-import { WindowType } from "@/lib/store";
+import { useWin95Store } from "@/lib/store";
 import { useEffect, useRef } from "react";
 import { cn } from "../../lib/utils";
 
@@ -11,7 +11,6 @@ interface ContextMenuProps {
   itemId?: string;
   onClose: () => void;
   onStartMenuAction?: (action: string, itemId?: string) => void;
-  createWindow?: (type: WindowType, title?: string) => string;
   show: boolean;
 }
 
@@ -22,31 +21,10 @@ export function Win95ContextMenu({
   itemId,
   onClose,
   onStartMenuAction,
-  createWindow,
   show,
 }: ContextMenuProps) {
-  // Simpler menu with direct DOM access
   const menuContainerRef = useRef<HTMLDivElement>(null);
-
-  // Function to handle direct menu item click
-  function handleMenuClick(action: string) {
-    console.log(`Menu action ${action} clicked directly`);
-    // Close menu first
-    onClose();
-
-    // Handle specific actions with a delay
-    setTimeout(() => {
-      if (action === "lineup") {
-        console.log("Executing lineup action");
-        onStartMenuAction?.("lineup", "");
-      } else if (action === "arrange") {
-        createWindow?.("explorer");
-      } else if (action === "new-folder") {
-        console.log("Creating new folder");
-        onStartMenuAction?.("new-folder", "");
-      }
-    }, 50);
-  }
+  const clipboard = useWin95Store((state) => state.clipboard);
 
   // Use an effect to position the menu and add click handlers when shown
   useEffect(() => {
@@ -72,6 +50,20 @@ export function Win95ContextMenu({
     }
   }, [show, x, y]);
 
+  // Add a useEffect to handle the context menu closing when the user clicks outside of it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (show && !menuContainerRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show]);
+
   return (
     <div
       ref={menuContainerRef}
@@ -95,7 +87,8 @@ export function Win95ContextMenu({
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              handleMenuClick("arrange");
+              onClose();
+              setTimeout(() => onStartMenuAction?.("arrange"), 50);
             }}
           >
             Arrange Icons
@@ -107,8 +100,8 @@ export function Win95ContextMenu({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              console.log("Direct React click handler on Line up Icons");
-              handleMenuClick("lineup");
+              onClose();
+              setTimeout(() => onStartMenuAction?.("lineup"), 50);
             }}
           >
             Line up Icons
@@ -117,15 +110,35 @@ export function Win95ContextMenu({
           <div className="border-t border-[#5a5a5a] my-1" />
 
           <div
-            className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
-            onMouseDown={() => handleMenuClick("paste")}
+            className={cn(
+              "px-4 py-1 hover:bg-[#000080] hover:text-white",
+              clipboard.items.length > 0
+                ? "cursor-pointer"
+                : "text-[#808080] cursor-default"
+            )}
+            onMouseDown={() => {
+              if (clipboard.items.length > 0) {
+                onClose();
+                setTimeout(() => onStartMenuAction?.("paste"), 50);
+              }
+            }}
           >
             Paste
           </div>
 
           <div
-            className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
-            onMouseDown={() => handleMenuClick("paste-shortcut")}
+            className={cn(
+              "px-4 py-1 hover:bg-[#000080] hover:text-white",
+              clipboard.items.length > 0
+                ? "cursor-pointer"
+                : "text-[#808080] cursor-default"
+            )}
+            onMouseDown={() => {
+              if (clipboard.items.length > 0) {
+                onClose();
+                setTimeout(() => onStartMenuAction?.("paste-shortcut"), 50);
+              }
+            }}
           >
             Paste Shortcut
           </div>
@@ -134,7 +147,10 @@ export function Win95ContextMenu({
 
           <div
             className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
-            onMouseDown={() => handleMenuClick("new-folder")}
+            onMouseDown={() => {
+              onClose();
+              setTimeout(() => onStartMenuAction?.("new-folder"), 50);
+            }}
           >
             New Folder
           </div>
@@ -143,7 +159,10 @@ export function Win95ContextMenu({
 
           <div
             className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
-            onMouseDown={() => handleMenuClick("properties")}
+            onMouseDown={() => {
+              onClose();
+              setTimeout(() => onStartMenuAction?.("properties"), 50);
+            }}
           >
             Properties
           </div>
@@ -155,8 +174,8 @@ export function Win95ContextMenu({
           <div
             className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
             onMouseDown={() => {
-              handleMenuClick("open");
-              onStartMenuAction?.("open", itemId || "");
+              onClose();
+              setTimeout(() => onStartMenuAction?.("open", itemId), 50);
             }}
           >
             Open
@@ -165,8 +184,8 @@ export function Win95ContextMenu({
           <div
             className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
             onMouseDown={() => {
-              handleMenuClick("explore");
-              onStartMenuAction?.("explore", itemId || "");
+              onClose();
+              setTimeout(() => onStartMenuAction?.("explore", itemId), 50);
             }}
           >
             Explore
@@ -177,8 +196,8 @@ export function Win95ContextMenu({
           <div
             className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
             onMouseDown={() => {
-              handleMenuClick("cut");
-              onStartMenuAction?.("cut", itemId || "");
+              onClose();
+              setTimeout(() => onStartMenuAction?.("cut", itemId), 50);
             }}
           >
             Cut
@@ -187,11 +206,53 @@ export function Win95ContextMenu({
           <div
             className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
             onMouseDown={() => {
-              handleMenuClick("copy");
-              onStartMenuAction?.("copy", itemId || "");
+              onClose();
+              setTimeout(() => onStartMenuAction?.("copy", itemId), 50);
             }}
           >
             Copy
+          </div>
+
+          {clipboard.items.length > 0 && (
+            <>
+              <div className="border-t border-[#5a5a5a] my-1" />
+              <div
+                className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
+                onMouseDown={() => {
+                  onClose();
+                  setTimeout(
+                    () => onStartMenuAction?.("paste-to-folder", itemId),
+                    50
+                  );
+                }}
+              >
+                Paste
+              </div>
+            </>
+          )}
+
+          <div className="border-t border-[#5a5a5a] my-1" />
+
+          <div
+            className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
+            onMouseDown={() => {
+              onClose();
+              setTimeout(() => onStartMenuAction?.("delete", itemId), 50);
+            }}
+          >
+            Delete
+          </div>
+
+          <div className="border-t border-[#5a5a5a] my-1" />
+
+          <div
+            className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
+            onMouseDown={() => {
+              onClose();
+              setTimeout(() => onStartMenuAction?.("properties", itemId), 50);
+            }}
+          >
+            Properties
           </div>
         </div>
       )}
