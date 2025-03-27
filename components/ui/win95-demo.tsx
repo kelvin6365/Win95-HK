@@ -101,6 +101,11 @@ export default function Win95Demo() {
         setIsFirstVisit(true);
         // Set the flag in localStorage
         localStorage.setItem("win95_has_visited", "true");
+
+        // Clear any existing window state to ensure a clean start
+        localStorage.removeItem("win95_window_state");
+        // Ensure the myComputerVisible flag is properly reset
+        useWin95Store.setState({ isMyComputerVisible: false });
       } else {
         // Not first visit - skip loading screen
         setIsFirstVisit(false);
@@ -509,11 +514,26 @@ export default function Win95Demo() {
 
       // Handle dragging from file manager to desktop (remove from folder)
       if (fileItemId) {
-        const { moveItemToFolder } = useWin95Store.getState();
+        const { moveItemToFolder, removeItemFromFolder } =
+          useWin95Store.getState();
         const item = desktopIcons[fileItemId];
 
         if (item && item.parentFolderId) {
+          // First remove from the source folder contents list
+          removeItemFromFolder(item.parentFolderId, fileItemId);
+
+          // Then update the item's parent folder reference
           moveItemToFolder(fileItemId, undefined);
+
+          // Notify all file managers to refresh
+          window.dispatchEvent(
+            new CustomEvent("folderContentsChanged", {
+              detail: {
+                sourceFolderId: item.parentFolderId,
+                targetFolderId: undefined,
+              },
+            })
+          );
         }
 
         // Update the position on the desktop
@@ -718,8 +738,20 @@ export default function Win95Demo() {
 
       if (iconId === "myComputer") {
         console.log("Opening My Computer");
-        const windowId = createWindow("my-computer", "My Computer");
-        setActiveWindow(windowId);
+
+        // Check if My Computer window already exists
+        const existingMyComputer = Object.entries(windows).find(
+          ([, win]) => win.type === "my-computer"
+        );
+
+        if (existingMyComputer) {
+          // If it exists, just focus the existing window
+          setActiveWindow(existingMyComputer[0]);
+        } else {
+          // Otherwise create a new one
+          const windowId = createWindow("my-computer", "My Computer");
+          setActiveWindow(windowId);
+        }
       } else if (icon.type === "text-file" && icon.label.endsWith(".txt")) {
         // Open text files in Notepad
         const fileTitle = icon.label;
@@ -739,7 +771,7 @@ export default function Win95Demo() {
         setActiveWindow(windowId);
       }
     },
-    [desktopIcons, createWindow, setActiveWindow]
+    [desktopIcons, createWindow, setActiveWindow, windows]
   );
 
   // Line up desktop icons in a grid pattern
@@ -896,7 +928,62 @@ export default function Win95Demo() {
     ]
   );
 
-  // Create the My Computer window at startup if needed
+  // Load saved window state on startup
+  useEffect(() => {
+    if (!isSystemReady) return;
+
+    const savedWindows = loadSavedWindowState();
+
+    // Only load saved windows if there are any
+    if (savedWindows.length > 0) {
+      // Track if we found a my-computer window in saved state
+      let hasMyComputerWindow = false;
+
+      savedWindows.forEach((win: SavedWindowState) => {
+        // Check if this is a my-computer window
+        if (win.type === "my-computer") {
+          hasMyComputerWindow = true;
+        }
+
+        addWindow({
+          id: win.id,
+          type: win.type as WindowType,
+          position: win.position,
+          size: win.size,
+          title: win.title,
+          isMaximized: win.isMinimized,
+          folderId: win.currentFolderId,
+          minimized: false,
+          maximized: win.isMinimized || false,
+          component: win.type,
+        });
+      });
+
+      // Update the myComputerVisible flag based on found windows
+      if (hasMyComputerWindow) {
+        useWin95Store.setState({ isMyComputerVisible: true });
+      }
+    } else {
+      // If no saved windows and it's the first visit, create an explorer window
+      if (isFirstVisit) {
+        // Create a Windows Explorer window to show the desktop
+        const explorerWindowId = "desktop-explorer";
+        addWindow({
+          id: explorerWindowId,
+          type: "explorer",
+          position: { x: 100, y: 50 },
+          size: { width: 440, height: 320 },
+          title: "Desktop",
+          minimized: false,
+          maximized: false,
+          component: "explorer",
+        });
+        setActiveWindow(explorerWindowId);
+      }
+    }
+  }, [isSystemReady, addWindow, isFirstVisit, setActiveWindow]);
+
+  // Create the My Computer window at startup if needed (but only if no windows exist)
   useEffect(() => {
     if (isSystemReady && isMyComputerVisible) {
       // Check if My Computer window already exists in the windows array
@@ -904,7 +991,11 @@ export default function Win95Demo() {
         (window) => window.type === "my-computer"
       );
 
-      if (!myComputerExists) {
+      // Check if we have any windows at all
+      const hasAnyWindows = Object.keys(windows).length > 0;
+
+      // Only create if it doesn't exist AND we don't have any windows (avoiding duplicates on startup)
+      if (!myComputerExists && !hasAnyWindows) {
         // Create a My Computer window with the consistent ID
         const myComputerId = "my-computer-main";
         addWindow({
@@ -945,29 +1036,6 @@ export default function Win95Demo() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [windows]);
-
-  // Load saved window state on startup
-  useEffect(() => {
-    if (!isSystemReady) return;
-
-    const savedWindows = loadSavedWindowState();
-    if (savedWindows.length > 0) {
-      savedWindows.forEach((win: SavedWindowState) => {
-        addWindow({
-          id: win.id,
-          type: win.type as WindowType,
-          position: win.position,
-          size: win.size,
-          title: win.title,
-          isMaximized: win.isMinimized,
-          folderId: win.currentFolderId,
-          minimized: false,
-          maximized: win.isMinimized || false,
-          component: win.type,
-        });
-      });
-    }
-  }, [isSystemReady, addWindow]);
 
   // Handle icon name editing
   const handleIconNameDoubleClick = useCallback(

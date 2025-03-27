@@ -18,6 +18,7 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
     removeItemFromFolder,
     closeWindow,
     copyItem,
+    addItemToFolder,
   } = useWin95Store();
 
   // Local state for the folder being viewed
@@ -257,12 +258,30 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
       // Move the dragged item
       moveItemToFolder(itemToMove, targetFolderId);
 
+      // If moving from one folder to another, remove from source folder first
+      if (sourceFolderId) {
+        removeItemFromFolder(sourceFolderId, itemToMove);
+      }
+
+      // If moving to a folder, add to target folder
+      if (targetFolderId) {
+        addItemToFolder(targetFolderId, itemToMove);
+      }
+
       // Also move any selected items if from file manager
       if (itemId && selectedItems.length > 0) {
         console.log("Moving selected items:", selectedItems);
         selectedItems.forEach((selectedId) => {
           if (selectedId !== itemToMove) {
             moveItemToFolder(selectedId, targetFolderId);
+
+            // Handle folder contents for selected items too
+            if (sourceFolderId) {
+              removeItemFromFolder(sourceFolderId, selectedId);
+            }
+            if (targetFolderId) {
+              addItemToFolder(targetFolderId, selectedId);
+            }
           }
         });
       }
