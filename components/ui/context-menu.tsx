@@ -237,6 +237,18 @@ export function Win95ContextMenu({
             className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
             onMouseDown={() => {
               onClose();
+              setTimeout(() => onStartMenuAction?.("rename", itemId), 50);
+            }}
+          >
+            Rename
+          </div>
+
+          <div className="border-t border-[#5a5a5a] my-1" />
+
+          <div
+            className="px-4 py-1 hover:bg-[#000080] hover:text-white cursor-pointer"
+            onMouseDown={() => {
+              onClose();
               setTimeout(() => onStartMenuAction?.("delete", itemId), 50);
             }}
           >

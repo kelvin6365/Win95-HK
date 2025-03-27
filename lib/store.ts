@@ -21,7 +21,7 @@ export interface WindowState {
   title: string;
   isActive?: boolean;
   zIndex: number;
-  filename?: string; // For text files
+  filename?: string;
   content?:
     | {
         message: string;
@@ -31,13 +31,12 @@ export interface WindowState {
         }>;
       }
     | string;
-  isMaximized?: boolean; // Track if window is maximized
+  isMaximized?: boolean;
   preMaximizeState?: {
-    // Store pre-maximize dimensions and position
     position: { x: number; y: number };
     size: { width: number; height: number };
   };
-  folderId?: string; // Add this to support passing a folder ID to the window
+  folderId?: string;
   minimized: boolean;
   maximized: boolean;
   component: string;
@@ -50,8 +49,8 @@ export interface DesktopIcon {
   y: number;
   label: string;
   type: string;
-  parentFolderId?: string; // Parent folder ID for nested items
-  contents?: string[]; // IDs of items contained in this folder
+  parentFolderId?: string;
+  contents?: string[];
   onDoubleClick?: () => void;
 }
 
@@ -69,32 +68,22 @@ export interface ContextMenuState {
 
 // Store state interface
 export interface Win95State {
-  // Window management
   windows: Record<string, WindowState>;
   activeWindowId: string | null;
   nextZIndex: number;
-
-  // Desktop icons
   desktopIcons: Record<string, DesktopIcon>;
   selectedDesktopIcons: string[];
-
-  // Clipboard state
   clipboard: {
     type: "copy" | "cut" | null;
-    items: string[]; // Array of item IDs
+    items: string[];
   };
-
-  // Main window visibility
   isMyComputerVisible: boolean;
-
-  // Taskbar state
   isTaskbarOpen: boolean;
-
-  // Context menu
   contextMenu: ContextMenuState;
-
-  // Time state
   currentTime: string;
+  folderContents: Record<string, string[]>;
+  lastRightClickCoords: { x: number; y: number };
+  editingIconId: string | null;
 
   // Actions
   addWindow: (window: Omit<WindowState, "zIndex">) => void;
@@ -112,8 +101,6 @@ export interface Win95State {
   toggleMyComputer: () => void;
   setTaskbarOpen: (isOpen: boolean) => void;
   toggleTaskbar: () => void;
-
-  // Desktop icon actions
   addDesktopIcon: (icon: DesktopIcon) => void;
   updateDesktopIconPosition: (
     id: string,
@@ -121,13 +108,8 @@ export interface Win95State {
   ) => void;
   selectDesktopIcon: (id: string, isMultiSelect?: boolean) => void;
   clearDesktopSelection: () => void;
-
-  // Context menu actions
   setContextMenu: (menu: ContextMenuState | null) => void;
-
-  // Time actions
   setCurrentTime: (time: string) => void;
-
   updateWindowMaximizedState: (
     id: string,
     isMaximized: boolean,
@@ -136,10 +118,6 @@ export interface Win95State {
       size: { width: number; height: number };
     }
   ) => void;
-
-  folderContents: Record<string, string[]>; // Map folder IDs to arrays of item IDs
-
-  // Add folder-related actions
   addItemToFolder: (folderId: string, itemId: string) => void;
   removeItemFromFolder: (folderId: string, itemId: string) => void;
   moveItemToFolder: (
@@ -147,20 +125,16 @@ export interface Win95State {
     targetFolderId: string | undefined
   ) => void;
   getFolderContents: (folderId: string) => DesktopIcon[];
-
-  // Clipboard actions
   setClipboard: (type: "copy" | "cut" | null, items: string[]) => void;
   pasteItems: (targetFolderId?: string) => void;
-
-  lastRightClickCoords: { x: number; y: number };
-
-  // File operations
   copyItem: (itemId: string, targetFolderId?: string, newName?: string) => void;
+  setEditingIconId: (id: string | null) => void;
+  renameDesktopIcon: (id: string, newLabel: string) => void;
 }
 
 // Function to load saved data from localStorage
 const loadSavedData = () => {
-  if (typeof window === "undefined") return null; // Skip on server-side
+  if (typeof window === "undefined") return null;
 
   try {
     const savedDesktopIcons = localStorage.getItem("win95_desktop_icons");
@@ -178,13 +152,13 @@ const loadSavedData = () => {
   }
 };
 
-// Get initial data from localStorage or use defaults
 const savedData = loadSavedData();
 
+// Create the store
 export const useWin95Store = create<Win95State>()(
   persist(
     (set, get) => ({
-      // Initialize state, using localStorage data if available
+      // Initial state
       windows: {},
       activeWindowId: null,
       nextZIndex: 1,
@@ -213,6 +187,7 @@ export const useWin95Store = create<Win95State>()(
         items: [],
       },
       lastRightClickCoords: { x: 0, y: 0 },
+      editingIconId: null,
 
       // Actions
       addWindow: (window) => {
@@ -230,7 +205,7 @@ export const useWin95Store = create<Win95State>()(
         }));
       },
 
-      updateWindowPosition: (id, position) => {
+      updateWindowPosition: (id, position) =>
         set((state) => ({
           windows: {
             ...state.windows,
@@ -239,10 +214,9 @@ export const useWin95Store = create<Win95State>()(
               position,
             },
           },
-        }));
-      },
+        })),
 
-      updateWindowSize: (id, size) => {
+      updateWindowSize: (id, size) =>
         set((state) => ({
           windows: {
             ...state.windows,
@@ -251,10 +225,9 @@ export const useWin95Store = create<Win95State>()(
               size,
             },
           },
-        }));
-      },
+        })),
 
-      updateWindowTitle: (id, title) => {
+      updateWindowTitle: (id, title) =>
         set((state) => ({
           windows: {
             ...state.windows,
@@ -263,86 +236,37 @@ export const useWin95Store = create<Win95State>()(
               title,
             },
           },
-        }));
-      },
+        })),
 
       setActiveWindow: (id) => {
         const { nextZIndex } = get();
-        const highZIndex = Math.max(1000, nextZIndex + 100); // Ensure active window has a much higher z-index
-
-        set((state) => {
-          // First check if the window still exists
-          if (!state.windows[id]) {
-            return state;
-          }
-
-          // Prepare updates for all windows to ensure correct z-ordering
-          const updatedWindows = { ...state.windows };
-
-          // Set the active window to have the highest z-index
-          updatedWindows[id] = {
-            ...updatedWindows[id],
-            zIndex: highZIndex,
-          };
-
-          return {
-            activeWindowId: id,
-            windows: updatedWindows,
-            nextZIndex: highZIndex + 1,
-          };
-        });
+        set((state) => ({
+          activeWindowId: id,
+          windows: {
+            ...state.windows,
+            [id]: {
+              ...state.windows[id],
+              zIndex: nextZIndex,
+            },
+          },
+          nextZIndex: nextZIndex + 1,
+        }));
       },
 
-      closeWindow: (id) => {
+      closeWindow: (id) =>
         set((state) => {
           const newWindows = { ...state.windows };
           delete newWindows[id];
-
-          // Set active window to the one with highest z-index or null if no windows
-          const windowIds = Object.keys(newWindows);
-          const activeId =
-            windowIds.length > 0
-              ? windowIds.reduce((a, b) =>
-                  newWindows[a].zIndex > newWindows[b].zIndex ? a : b
-                )
-              : null;
-
           return {
             windows: newWindows,
-            activeWindowId: activeId,
+            activeWindowId: null,
           };
-        });
-      },
+        }),
 
-      // Toggle My Computer visibility
-      toggleMyComputer: () => {
-        console.log("toggleMyComputer called - toggling visibility");
-        const { isMyComputerVisible, activeWindowId, windows, nextZIndex } =
-          get();
-
-        if (isMyComputerVisible) {
-          // If closing My Computer, activate another window if My Computer was active
-          if (activeWindowId === "main") {
-            const windowIds = Object.keys(windows);
-            const nextActiveId =
-              windowIds.length > 0
-                ? windowIds.reduce((a, b) =>
-                    windows[a].zIndex > windows[b].zIndex ? a : b
-                  )
-                : null;
-
-            set({ activeWindowId: nextActiveId });
-          }
-        } else {
-          // When reopening, bring to front
-          set({
-            activeWindowId: "main",
-            nextZIndex: nextZIndex + 1,
-          });
-        }
-
-        set({ isMyComputerVisible: !isMyComputerVisible });
-      },
+      toggleMyComputer: () =>
+        set((state) => ({
+          isMyComputerVisible: !state.isMyComputerVisible,
+        })),
 
       setTaskbarOpen: (isOpen) => set({ isTaskbarOpen: isOpen }),
 
@@ -351,97 +275,53 @@ export const useWin95Store = create<Win95State>()(
           isTaskbarOpen: !state.isTaskbarOpen,
         })),
 
-      // Desktop icon actions
-      addDesktopIcon: (icon) => {
-        set((state) => {
-          const updatedIcons = {
+      addDesktopIcon: (icon) =>
+        set((state) => ({
+          desktopIcons: {
             ...state.desktopIcons,
             [icon.id]: icon,
-          };
+          },
+        })),
 
-          // Save to localStorage
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "win95_desktop_icons",
-              JSON.stringify(updatedIcons)
-            );
-          }
-
-          return {
-            ...state,
-            desktopIcons: updatedIcons,
-          };
-        });
-      },
-
-      updateDesktopIconPosition: (id, position) => {
-        set((state) => {
-          if (!state.desktopIcons[id]) return state;
-
-          const updatedIcons = {
+      updateDesktopIconPosition: (id, position) =>
+        set((state) => ({
+          desktopIcons: {
             ...state.desktopIcons,
             [id]: {
               ...state.desktopIcons[id],
               x: position.x,
               y: position.y,
             },
-          };
+          },
+        })),
 
-          // Save to localStorage
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "win95_desktop_icons",
-              JSON.stringify(updatedIcons)
-            );
-          }
-
-          return {
-            ...state,
-            desktopIcons: updatedIcons,
-          };
-        });
-      },
-
-      selectDesktopIcon: (id, isMultiSelect = false) => {
+      selectDesktopIcon: (id, isMultiSelect = false) =>
         set((state) => ({
           selectedDesktopIcons: isMultiSelect
             ? state.selectedDesktopIcons.includes(id)
               ? state.selectedDesktopIcons.filter((i) => i !== id)
               : [...state.selectedDesktopIcons, id]
             : [id],
-        }));
-      },
-
-      clearDesktopSelection: () => {
-        set({ selectedDesktopIcons: [] });
-      },
-
-      // Context menu actions
-      setContextMenu: (menu) =>
-        set((state) => {
-          console.log("Setting context menu and coords:", menu);
-          return {
-            contextMenu: menu
-              ? menu
-              : {
-                  show: false,
-                  x: 0,
-                  y: 0,
-                  type: "desktop",
-                },
-            lastRightClickCoords: menu
-              ? { x: menu.x, y: menu.y }
-              : state.lastRightClickCoords,
-          };
-        }),
-
-      // Time actions
-      setCurrentTime: (time) =>
-        set(() => ({
-          currentTime: time,
         })),
 
-      updateWindowMaximizedState: (id, isMaximized, preMaximizeState) => {
+      clearDesktopSelection: () => set({ selectedDesktopIcons: [] }),
+
+      setContextMenu: (menu) =>
+        set((state) => ({
+          contextMenu: menu || {
+            show: false,
+            x: 0,
+            y: 0,
+            type: "desktop",
+          },
+          lastRightClickCoords: menu
+            ? { x: menu.x, y: menu.y }
+            : state.lastRightClickCoords,
+        })),
+
+      setCurrentTime: (time) => set({ currentTime: time }),
+
+      updateWindowMaximizedState: (id, isMaximized, preMaximizeState) =>
         set((state) => ({
           windows: {
             ...state.windows,
@@ -453,386 +333,125 @@ export const useWin95Store = create<Win95State>()(
                 : state.windows[id].preMaximizeState,
             },
           },
-        }));
-      },
+        })),
 
-      // Implement folder-related actions
-      addItemToFolder: (folderId: string, itemId: string) => {
-        set((state) => {
-          // Check if folder exists
-          if (!state.desktopIcons[folderId]) return state;
-
-          // Check if the folder already contains the item
-          const currentContents = state.folderContents[folderId] || [];
-          if (currentContents.includes(itemId)) return state;
-
-          // Update parent reference on the item
-          const updatedDesktopIcons = {
-            ...state.desktopIcons,
-            [itemId]: {
-              ...state.desktopIcons[itemId],
-              parentFolderId: folderId,
-            },
-          };
-
-          const updatedFolderContents = {
+      addItemToFolder: (folderId, itemId) =>
+        set((state) => ({
+          folderContents: {
             ...state.folderContents,
-            [folderId]: [...currentContents, itemId],
-          };
+            [folderId]: [...(state.folderContents[folderId] || []), itemId],
+          },
+        })),
 
-          // Save to localStorage
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "win95_desktop_icons",
-              JSON.stringify(updatedDesktopIcons)
-            );
-            localStorage.setItem(
-              "win95_folder_contents",
-              JSON.stringify(updatedFolderContents)
-            );
-          }
-
-          return {
-            ...state,
-            desktopIcons: updatedDesktopIcons,
-            folderContents: updatedFolderContents,
-          };
-        });
-      },
-
-      removeItemFromFolder: (folderId: string, itemId: string) => {
-        set((state) => {
-          // Check if folder exists
-          if (!state.folderContents[folderId]) return state;
-
-          // Remove parent reference from the item
-          const updatedDesktopIcons = {
-            ...state.desktopIcons,
-            [itemId]: {
-              ...state.desktopIcons[itemId],
-              parentFolderId: undefined,
-            },
-          };
-
-          // Update folder contents
-          const updatedContents = state.folderContents[folderId].filter(
-            (id) => id !== itemId
-          );
-
-          const updatedFolderContents = {
+      removeItemFromFolder: (folderId, itemId) =>
+        set((state) => ({
+          folderContents: {
             ...state.folderContents,
-            [folderId]: updatedContents,
-          };
+            [folderId]: state.folderContents[folderId].filter(
+              (id) => id !== itemId
+            ),
+          },
+        })),
 
-          // Save to localStorage
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "win95_desktop_icons",
-              JSON.stringify(updatedDesktopIcons)
-            );
-            localStorage.setItem(
-              "win95_folder_contents",
-              JSON.stringify(updatedFolderContents)
-            );
-          }
-
-          return {
-            ...state,
-            desktopIcons: updatedDesktopIcons,
-            folderContents: updatedFolderContents,
-          };
-        });
-      },
-
-      moveItemToFolder: (
-        itemId: string,
-        targetFolderId: string | undefined
-      ) => {
+      moveItemToFolder: (itemId, targetFolderId) =>
         set((state) => {
-          console.log("STORE moveItemToFolder:", {
-            itemId,
-            targetFolderId,
-            currentState: state.folderContents,
-          });
-
           const item = state.desktopIcons[itemId];
-          if (!item) {
-            console.error("Item not found:", itemId);
-            return state;
-          }
-
-          // Get current folder ID
-          const sourceFolderId = item.parentFolderId;
-          console.log(
-            "Source folder:",
-            sourceFolderId,
-            "Target folder:",
-            targetFolderId
-          );
-
-          // Check if moving to same folder (no-op)
-          if (sourceFolderId === targetFolderId) {
-            console.log("Same folder, no change needed");
-            return state;
-          }
-
-          // Create new state objects to ensure React detects changes
-          const newFolderContents = { ...state.folderContents };
-
-          // 1. ALWAYS remove from source folder if it exists
-          if (sourceFolderId && newFolderContents[sourceFolderId]) {
-            console.log("Removing from source folder:", sourceFolderId);
-            newFolderContents[sourceFolderId] = newFolderContents[
-              sourceFolderId
-            ].filter((id) => id !== itemId);
-            // If folder is empty after removal, delete the folder entry
-            if (newFolderContents[sourceFolderId].length === 0) {
-              delete newFolderContents[sourceFolderId];
-            }
-          }
-
-          // 2. Add to target folder if specified (not desktop)
-          if (targetFolderId) {
-            console.log("Adding to target folder:", targetFolderId);
-            if (!newFolderContents[targetFolderId]) {
-              newFolderContents[targetFolderId] = [];
-            }
-            // Only add if not already in target folder
-            if (!newFolderContents[targetFolderId].includes(itemId)) {
-              newFolderContents[targetFolderId] = [
-                ...newFolderContents[targetFolderId],
-                itemId,
-              ];
-            }
-          }
-
-          // 3. Update the item's parent reference
-          const newDesktopIcons = {
-            ...state.desktopIcons,
-            [itemId]: {
-              ...state.desktopIcons[itemId],
-              parentFolderId: targetFolderId,
-            },
-          };
-
-          console.log("Updated folder contents:", newFolderContents);
-
-          // 4. Save to localStorage
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "win95_desktop_icons",
-              JSON.stringify(newDesktopIcons)
-            );
-            localStorage.setItem(
-              "win95_folder_contents",
-              JSON.stringify(newFolderContents)
-            );
-          }
+          if (!item) return state;
 
           return {
-            ...state,
-            desktopIcons: newDesktopIcons,
-            folderContents: newFolderContents,
+            desktopIcons: {
+              ...state.desktopIcons,
+              [itemId]: {
+                ...item,
+                parentFolderId: targetFolderId,
+              },
+            },
           };
-        });
-      },
+        }),
 
-      getFolderContents: (folderId: string) => {
+      getFolderContents: (folderId) => {
         const state = get();
-        const contentIds = state.folderContents[folderId] || [];
-        return contentIds.map((id) => state.desktopIcons[id]).filter(Boolean);
+        return (state.folderContents[folderId] || [])
+          .map((id) => state.desktopIcons[id])
+          .filter(Boolean);
       },
 
-      // Clipboard actions
-      setClipboard: (type, items) => {
-        console.log("Setting clipboard:", { type, items });
-        set({ clipboard: { type, items } });
-      },
+      setClipboard: (type, items) => set({ clipboard: { type, items } }),
 
-      pasteItems: (targetFolderId?: string) => {
-        const {
-          clipboard,
-          desktopIcons,
-          addDesktopIcon,
-          folderContents,
-          lastRightClickCoords,
-        } = get();
+      pasteItems: (targetFolderId) => {
+        const state = get();
+        if (!state.clipboard.items.length) return;
 
-        console.log("Pasting items:", {
-          clipboard,
-          targetFolderId,
-          lastRightClickCoords,
-        });
+        state.clipboard.items.forEach((itemId) => {
+          const item = state.desktopIcons[itemId];
+          if (!item) return;
 
-        if (!clipboard.items.length) return;
-
-        // Helper function to get next available name
-        const getNextAvailableName = (
-          baseName: string,
-          existingNames: string[]
-        ) => {
-          if (!existingNames.includes(baseName)) return baseName;
-
-          let counter = 2;
-          let testName = `${baseName} (${counter})`;
-
-          while (existingNames.includes(testName)) {
-            counter++;
-            testName = `${baseName} (${counter})`;
-          }
-
-          return testName;
-        };
-
-        // Get all existing names in the target location
-        const existingNames = Object.values(desktopIcons)
-          .filter((icon) => icon.parentFolderId === targetFolderId)
-          .map((icon) => icon.label);
-
-        // Function to recursively copy a folder and its contents
-        const copyFolderContents = (
-          sourceId: string,
-          newParentId: string
-        ): string[] => {
-          const sourceContents = folderContents[sourceId] || [];
-          return sourceContents
-            .map((itemId) => {
-              const sourceItem = desktopIcons[itemId];
-              if (!sourceItem) return null;
-
-              const newId = `${sourceItem.type}-${Date.now()}-${Math.random()
-                .toString(36)
-                .substr(2, 9)}`;
-
-              // Create the new item with exact paste coordinates
-              const newItem: DesktopIcon = {
-                ...sourceItem,
-                id: newId,
-                parentFolderId: newParentId,
-                x: lastRightClickCoords.x,
-                y: lastRightClickCoords.y,
-              };
-
-              // Add the new item
-              addDesktopIcon(newItem);
-
-              // If it's a folder, recursively copy its contents
-              if (sourceItem.type === "folder") {
-                const newContents = copyFolderContents(itemId, newId);
-                if (newContents.length > 0) {
-                  set((state) => ({
-                    folderContents: {
-                      ...state.folderContents,
-                      [newId]: newContents,
-                    },
-                  }));
-                }
-              }
-
-              return newId;
-            })
-            .filter((id): id is string => id !== null);
-        };
-
-        const newItems = clipboard.items
-          .map((itemId, index) => {
-            const sourceItem = desktopIcons[itemId];
-            if (!sourceItem) return null;
-
-            const newId = `${sourceItem.type}-${Date.now()}-${Math.random()
-              .toString(36)
-              .substr(2, 9)}`;
-
-            // Create new label with proper naming for duplicates
-            let baseName = sourceItem.label;
-            if (!baseName.startsWith("Copy of ")) {
-              baseName = `Copy of ${baseName}`;
-            }
-            const newLabel = getNextAvailableName(baseName, existingNames);
-
-            // Use exact paste coordinates for first item, offset others slightly
-            const x =
-              index === 0
-                ? lastRightClickCoords.x
-                : lastRightClickCoords.x + index * 20;
-            const y =
-              index === 0
-                ? lastRightClickCoords.y
-                : lastRightClickCoords.y + index * 20;
-
-            // Create the new item
-            const newItem: DesktopIcon = {
-              ...sourceItem,
+          if (state.clipboard.type === "cut") {
+            state.moveItemToFolder(itemId, targetFolderId);
+          } else {
+            const newId = `${item.type}-${Date.now()}`;
+            state.addDesktopIcon({
+              ...item,
               id: newId,
-              label: newLabel,
               parentFolderId: targetFolderId,
-              x,
-              y,
-            };
-
-            // If this is a folder, recursively copy its contents
-            if (sourceItem.type === "folder") {
-              const newContents = copyFolderContents(itemId, newId);
-              if (newContents.length > 0) {
-                set((state) => ({
-                  folderContents: {
-                    ...state.folderContents,
-                    [newId]: newContents,
-                  },
-                }));
-              }
-            }
-
-            return newItem;
-          })
-          .filter((item): item is DesktopIcon => item !== null);
-
-        // Add all new items
-        newItems.forEach((item) => {
-          addDesktopIcon(item);
+            });
+          }
         });
 
-        // If this was a cut operation, clear clipboard
-        if (clipboard.type === "cut") {
+        if (state.clipboard.type === "cut") {
           set({ clipboard: { type: null, items: [] } });
         }
-
-        // Save to localStorage
-        if (typeof window !== "undefined") {
-          localStorage.setItem(
-            "win95_desktop_icons",
-            JSON.stringify(get().desktopIcons)
-          );
-          localStorage.setItem(
-            "win95_folder_contents",
-            JSON.stringify(get().folderContents)
-          );
-        }
       },
 
-      // File operations
-      copyItem: (itemId: string, targetFolderId?: string, newName?: string) =>
+      copyItem: (itemId, targetFolderId, newName) =>
         set((state) => {
-          const sourceItem = state.desktopIcons[itemId];
-          if (!sourceItem) return state;
+          const item = state.desktopIcons[itemId];
+          if (!item) return state;
 
-          const newId = `${sourceItem.type}-${Date.now()}`;
-          const newDesktopIcons = { ...state.desktopIcons };
+          const newId = `${item.type}-${Date.now()}`;
+          return {
+            desktopIcons: {
+              ...state.desktopIcons,
+              [newId]: {
+                ...item,
+                id: newId,
+                label: newName || item.label,
+                parentFolderId: targetFolderId,
+              },
+            },
+          };
+        }),
 
-          newDesktopIcons[newId] = {
-            ...sourceItem,
-            id: newId,
-            label: newName || sourceItem.label,
-            parentFolderId: targetFolderId,
+      setEditingIconId: (id) => set({ editingIconId: id }),
+
+      renameDesktopIcon: (id, newLabel) =>
+        set((state) => {
+          if (!state.desktopIcons[id]) return state;
+
+          const updatedIcons = {
+            ...state.desktopIcons,
+            [id]: {
+              ...state.desktopIcons[id],
+              label: newLabel,
+            },
           };
 
-          return { desktopIcons: newDesktopIcons };
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "win95_desktop_icons",
+              JSON.stringify(updatedIcons)
+            );
+          }
+
+          return {
+            desktopIcons: updatedIcons,
+            editingIconId: null,
+          };
         }),
     }),
     {
-      name: "win95-storage", // name of the item in localStorage
+      name: "win95-storage",
       storage: createJSONStorage(() => localStorage),
-      // Only persist the window positions and desktop icons
       partialize: (state) => ({
         windows: Object.fromEntries(
           Object.entries(state.windows).map(([id, window]) => [

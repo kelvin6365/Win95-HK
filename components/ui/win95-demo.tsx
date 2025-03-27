@@ -75,6 +75,7 @@ export default function Win95Demo() {
     desktopIcons,
     selectedDesktopIcons,
     contextMenu,
+    editingIconId,
     addWindow,
     setActiveWindow,
     closeWindow,
@@ -86,6 +87,8 @@ export default function Win95Demo() {
     setContextMenu,
     setCurrentTime,
     addDesktopIcon,
+    setEditingIconId,
+    renameDesktopIcon,
   } = useWin95Store();
 
   // Check if it's the first visit using localStorage
@@ -453,21 +456,6 @@ export default function Win95Demo() {
         delete el.dataset.wasDragging;
       });
 
-      // Get desktop position
-      const rect = desktopRef.current.getBoundingClientRect();
-      let x = Math.max(0, e.clientX - rect.left);
-      let y = Math.max(0, e.clientY - rect.top);
-
-      // Snap to grid
-      x = Math.round(x / GRID_SIZE) * GRID_SIZE;
-      y = Math.round(y / GRID_SIZE) * GRID_SIZE;
-
-      // Ensure icons don't go too far right or bottom
-      if (rect.width && rect.height) {
-        x = Math.min(x, rect.width - 80); // Icon width approx 80px
-        y = Math.min(y, rect.height - 80); // Icon height approx 80px
-      }
-
       // Check if we're dropping on a folder
       const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
       const folderIconElement = dropTarget?.closest("[data-icon-id]");
@@ -478,41 +466,54 @@ export default function Win95Demo() {
         console.log(`Dropping onto folder: ${folderIconId}`);
 
         // Get the Zustand store functions directly to avoid stale closures
-        const { moveItemToFolder } = useWin95Store.getState();
+        const { moveItemToFolder, addItemToFolder } = useWin95Store.getState();
 
         if (iconId) {
           // Move the dragged icon to this folder
           moveItemToFolder(iconId, folderIconId);
+          addItemToFolder(folderIconId, iconId);
 
           // If multiple icons were selected, move them all
           if (selectedDesktopIcons.includes(iconId)) {
             selectedDesktopIcons.forEach((id) => {
               if (id !== iconId) {
                 moveItemToFolder(id, folderIconId);
+                addItemToFolder(folderIconId, id);
               }
             });
           }
-
-          // Play a sound or provide feedback
-          // ...
 
           return; // Exit early since we're handling this as a folder drop
         } else if (fileItemId) {
           // Handle file item being dropped from a file manager window
           moveItemToFolder(fileItemId, folderIconId);
+          addItemToFolder(folderIconId, fileItemId);
           return;
         }
       }
 
-      // If we're here, this is a drop onto the desktop (not a folder)
+      // Get desktop position for regular desktop drops
+      const rect = desktopRef.current.getBoundingClientRect();
+      let x = Math.max(0, e.clientX - rect.left);
+      let y = Math.max(0, e.clientY - rect.top);
+
+      // Snap to grid
+      x = Math.round(x / GRID_SIZE) * GRID_SIZE;
+      y = Math.round(y / GRID_SIZE) * GRID_SIZE;
+
+      // Ensure icons don't go too far right or bottom
+      if (rect.width && rect.height) {
+        x = Math.min(x, rect.width - 80);
+        y = Math.min(y, rect.height - 80);
+      }
 
       // Handle dragging from file manager to desktop (remove from folder)
       if (fileItemId) {
-        const { removeItemFromFolder } = useWin95Store.getState();
+        const { moveItemToFolder } = useWin95Store.getState();
         const item = desktopIcons[fileItemId];
 
         if (item && item.parentFolderId) {
-          removeItemFromFolder(item.parentFolderId, fileItemId);
+          moveItemToFolder(fileItemId, undefined);
         }
 
         // Update the position on the desktop
@@ -520,16 +521,14 @@ export default function Win95Demo() {
         return;
       }
 
-      // Regular desktop icon moving (existing functionality)
+      // Regular desktop icon moving
       if (iconId) {
         // Move all selected icons if we're dragging a selected icon
         if (selectedDesktopIcons.includes(iconId)) {
-          // Calculate the offset from the dragged icon to the drop position
           const draggedIcon = desktopIcons[iconId];
           const offsetX = x - draggedIcon.x;
           const offsetY = y - draggedIcon.y;
 
-          // Update all selected icons positions
           selectedDesktopIcons.forEach((id) => {
             if (id !== iconId) {
               const icon = desktopIcons[id];
@@ -858,6 +857,12 @@ export default function Win95Demo() {
           }
           break;
 
+        case "rename":
+          if (itemId) {
+            setEditingIconId(itemId);
+          }
+          break;
+
         case "explore":
           // Handle explore action
           break;
@@ -964,6 +969,42 @@ export default function Win95Demo() {
     }
   }, [isSystemReady, addWindow]);
 
+  // Handle icon name editing
+  const handleIconNameDoubleClick = useCallback(
+    (e: React.MouseEvent, iconId: string) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setEditingIconId(iconId);
+    },
+    [setEditingIconId]
+  );
+
+  const handleIconNameEdit = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>, iconId: string) => {
+      if (e.key === "Enter") {
+        const newName = (e.target as HTMLInputElement).value.trim();
+        if (newName) {
+          renameDesktopIcon(iconId, newName);
+        }
+        setEditingIconId(null);
+      } else if (e.key === "Escape") {
+        setEditingIconId(null);
+      }
+    },
+    [renameDesktopIcon, setEditingIconId]
+  );
+
+  const handleIconNameBlur = useCallback(
+    (e: React.FocusEvent<HTMLInputElement>, iconId: string) => {
+      const newName = e.target.value.trim();
+      if (newName) {
+        renameDesktopIcon(iconId, newName);
+      }
+      setEditingIconId(null);
+    },
+    [renameDesktopIcon, setEditingIconId]
+  );
+
   return (
     <div className="relative overflow-hidden w-full h-full">
       {!isSystemReady && isFirstVisit && (
@@ -1013,7 +1054,7 @@ export default function Win95Demo() {
 
               {/* Render desktop icons */}
               {Object.entries(desktopIcons)
-                .filter(([, icon]) => !icon.parentFolderId) // Only show items not inside a folder
+                .filter(([, icon]) => !icon.parentFolderId)
                 .map(([id, icon]) => (
                   <div
                     key={id}
@@ -1039,7 +1080,6 @@ export default function Win95Demo() {
                       if (rect) {
                         const x = e.clientX - rect.left;
                         const y = e.clientY - rect.top;
-                        console.log("Setting icon context menu at:", { x, y });
                         setContextMenu({
                           show: true,
                           x,
@@ -1101,22 +1141,41 @@ export default function Win95Demo() {
                         </svg>
                       )}
                     </div>
-                    <div
-                      className={`text-xs w-full px-1 py-[1px] truncate text-center leading-tight ${
-                        selectedDesktopIcons.includes(id)
-                          ? "border border-dotted border-white"
-                          : ""
-                      }`}
-                      style={{
-                        textShadow: "1px 1px 1px rgba(0,0,0,0.8)",
-                        fontFamily: "var(--win95-font)",
-                        wordBreak: "break-word",
-                        maxHeight: "28px",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {icon.label}
-                    </div>
+
+                    {/* Icon label */}
+                    {editingIconId === id ? (
+                      <input
+                        type="text"
+                        className="text-xs w-full px-1 py-[1px] text-center leading-tight bg-[#000080] text-white border border-dotted border-white focus:outline-none"
+                        defaultValue={icon.label}
+                        autoFocus
+                        onKeyDown={(e) => handleIconNameEdit(e, id)}
+                        onBlur={(e) => handleIconNameBlur(e, id)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          fontFamily: "var(--win95-font)",
+                          maxWidth: "68px",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className={`text-xs w-full px-1 py-[1px] truncate text-center leading-tight ${
+                          selectedDesktopIcons.includes(id)
+                            ? "border border-dotted border-white"
+                            : ""
+                        }`}
+                        style={{
+                          textShadow: "1px 1px 1px rgba(0,0,0,0.8)",
+                          fontFamily: "var(--win95-font)",
+                          wordBreak: "break-word",
+                          maxHeight: "28px",
+                          overflow: "hidden",
+                        }}
+                        onDoubleClick={(e) => handleIconNameDoubleClick(e, id)}
+                      >
+                        {icon.label}
+                      </div>
+                    )}
                   </div>
                 ))}
 
