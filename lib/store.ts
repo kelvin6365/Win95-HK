@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { immer } from "zustand/middleware/immer";
 
 // Define window types
 export type WindowType =
@@ -17,9 +18,8 @@ export interface WindowState {
   id: string;
   type: WindowType;
   position: { x: number; y: number };
-  size?: { width: number; height: number };
+  size: { width: number; height: number };
   title: string;
-  isActive?: boolean;
   zIndex: number;
   filename?: string;
   content?:
@@ -31,7 +31,7 @@ export interface WindowState {
         }>;
       }
     | string;
-  isMaximized?: boolean;
+  isMaximized: boolean;
   preMaximizeState?: {
     position: { x: number; y: number };
     size: { width: number; height: number };
@@ -51,7 +51,6 @@ export interface DesktopIcon {
   type: string;
   parentFolderId?: string;
   contents?: string[];
-  onDoubleClick?: () => void;
 }
 
 // Context menu type
@@ -66,24 +65,14 @@ export interface ContextMenuState {
   itemId?: string;
 }
 
-// Store state interface
-export interface Win95State {
+// SLICES
+// ------
+
+interface WindowsSlice {
   windows: Record<string, WindowState>;
   activeWindowId: string | null;
   nextZIndex: number;
-  desktopIcons: Record<string, DesktopIcon>;
-  selectedDesktopIcons: string[];
-  clipboard: {
-    type: "copy" | "cut" | null;
-    items: string[];
-  };
   isMyComputerVisible: boolean;
-  isTaskbarOpen: boolean;
-  contextMenu: ContextMenuState;
-  currentTime: string;
-  folderContents: Record<string, string[]>;
-  lastRightClickCoords: { x: number; y: number };
-  editingIconId: string | null;
 
   // Actions
   addWindow: (window: Omit<WindowState, "zIndex">) => void;
@@ -99,17 +88,6 @@ export interface Win95State {
   setActiveWindow: (id: string) => void;
   closeWindow: (id: string) => void;
   toggleMyComputer: () => void;
-  setTaskbarOpen: (isOpen: boolean) => void;
-  toggleTaskbar: () => void;
-  addDesktopIcon: (icon: DesktopIcon) => void;
-  updateDesktopIconPosition: (
-    id: string,
-    position: { x: number; y: number }
-  ) => void;
-  selectDesktopIcon: (id: string, isMultiSelect?: boolean) => void;
-  clearDesktopSelection: () => void;
-  setContextMenu: (menu: ContextMenuState | null) => void;
-  setCurrentTime: (time: string) => void;
   updateWindowMaximizedState: (
     id: string,
     isMaximized: boolean,
@@ -118,6 +96,26 @@ export interface Win95State {
       size: { width: number; height: number };
     }
   ) => void;
+}
+
+interface DesktopSlice {
+  desktopIcons: Record<string, DesktopIcon>;
+  selectedDesktopIcons: string[];
+  folderContents: Record<string, string[]>;
+  editingIconId: string | null;
+
+  // Actions
+  addDesktopIcon: (icon: DesktopIcon) => void;
+  updateDesktopIconPosition: (
+    id: string,
+    position: { x: number; y: number }
+  ) => void;
+  selectDesktopIcon: (id: string, isMultiSelect?: boolean) => void;
+  clearDesktopSelection: () => void;
+  setEditingIconId: (id: string | null) => void;
+  renameDesktopIcon: (id: string, newLabel: string) => void;
+
+  // Folder actions
   addItemToFolder: (folderId: string, itemId: string) => void;
   removeItemFromFolder: (folderId: string, itemId: string) => void;
   moveItemToFolder: (
@@ -125,12 +123,41 @@ export interface Win95State {
     targetFolderId: string | undefined
   ) => void;
   getFolderContents: (folderId: string) => DesktopIcon[];
+}
+
+interface UISlice {
+  isTaskbarOpen: boolean;
+  contextMenu: ContextMenuState;
+  currentTime: string;
+  lastRightClickCoords: { x: number; y: number };
+
+  // Actions
+  setTaskbarOpen: (isOpen: boolean) => void;
+  toggleTaskbar: () => void;
+  setContextMenu: (menu: ContextMenuState | null) => void;
+  setCurrentTime: (time: string) => void;
+}
+
+interface ClipboardSlice {
+  clipboard: {
+    type: "copy" | "cut" | null;
+    items: string[];
+  };
+
+  // Actions
   setClipboard: (type: "copy" | "cut" | null, items: string[]) => void;
   pasteItems: (targetFolderId?: string) => void;
   copyItem: (itemId: string, targetFolderId?: string, newName?: string) => void;
-  setEditingIconId: (id: string | null) => void;
-  renameDesktopIcon: (id: string, newLabel: string) => void;
 }
+
+// COMBINED STATE
+// -------------
+
+export interface Win95State
+  extends WindowsSlice,
+    DesktopSlice,
+    UISlice,
+    ClipboardSlice {}
 
 // Function to load saved data from localStorage
 const loadSavedData = () => {
@@ -154,14 +181,116 @@ const loadSavedData = () => {
 
 const savedData = loadSavedData();
 
+/**
+ * Saves the desktop icons to localStorage
+ */
+const saveDesktopIcons = (icons: Record<string, DesktopIcon>) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("win95_desktop_icons", JSON.stringify(icons));
+  } catch (error) {
+    console.error("Error saving desktop icons:", error);
+  }
+};
+
+/**
+ * Saves the folder contents to localStorage
+ */
+const saveFolderContents = (contents: Record<string, string[]>) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("win95_folder_contents", JSON.stringify(contents));
+  } catch (error) {
+    console.error("Error saving folder contents:", error);
+  }
+};
+
 // Create the store
 export const useWin95Store = create<Win95State>()(
   persist(
-    (set, get) => ({
-      // Initial state
+    immer((set, get) => ({
+      // WINDOWS SLICE
+      // ------------
       windows: {},
       activeWindowId: null,
       nextZIndex: 1,
+      isMyComputerVisible: false,
+
+      addWindow: (window) =>
+        set((state) => {
+          const { nextZIndex } = state;
+          state.windows[window.id] = {
+            ...window,
+            zIndex: nextZIndex,
+            // Ensure these fields always have default values
+            size: window.size || { width: 400, height: 300 },
+            isMaximized: window.isMaximized || false,
+          };
+          state.activeWindowId = window.id;
+          state.nextZIndex = nextZIndex + 1;
+        }),
+
+      updateWindowPosition: (id, position) =>
+        set((state) => {
+          if (state.windows[id]) {
+            state.windows[id].position = position;
+          }
+        }),
+
+      updateWindowSize: (id, size) =>
+        set((state) => {
+          if (state.windows[id]) {
+            state.windows[id].size = size;
+          }
+        }),
+
+      updateWindowTitle: (id, title) =>
+        set((state) => {
+          if (state.windows[id]) {
+            state.windows[id].title = title;
+          }
+        }),
+
+      setActiveWindow: (id) =>
+        set((state) => {
+          const { nextZIndex } = state;
+          if (state.windows[id]) {
+            state.activeWindowId = id;
+            state.windows[id].zIndex = nextZIndex;
+            state.nextZIndex = nextZIndex + 1;
+          }
+        }),
+
+      closeWindow: (id) =>
+        set((state) => {
+          if (state.windows[id]) {
+            delete state.windows[id];
+            // Only reset activeWindowId if the closed window was active
+            if (state.activeWindowId === id) {
+              state.activeWindowId = null;
+            }
+          }
+        }),
+
+      toggleMyComputer: () =>
+        set((state) => {
+          state.isMyComputerVisible = !state.isMyComputerVisible;
+        }),
+
+      updateWindowMaximizedState: (id, isMaximized, preMaximizeState) =>
+        set((state) => {
+          if (state.windows[id]) {
+            state.windows[id].isMaximized = isMaximized;
+            state.windows[id].maximized = isMaximized;
+
+            if (isMaximized && preMaximizeState) {
+              state.windows[id].preMaximizeState = preMaximizeState;
+            }
+          }
+        }),
+
+      // DESKTOP SLICE
+      // ------------
       desktopIcons: savedData?.desktopIcons || {
         myComputer: {
           id: "myComputer",
@@ -172,201 +301,110 @@ export const useWin95Store = create<Win95State>()(
         },
       },
       selectedDesktopIcons: [],
-      isMyComputerVisible: false,
-      isTaskbarOpen: false,
-      contextMenu: {
-        show: false,
-        x: 0,
-        y: 0,
-        type: "desktop",
-      },
       folderContents: savedData?.folderContents || {},
-      currentTime: "",
-      clipboard: {
-        type: null,
-        items: [],
-      },
-      lastRightClickCoords: { x: 0, y: 0 },
       editingIconId: null,
 
-      // Actions
-      addWindow: (window) => {
-        const { nextZIndex } = get();
-        set((state) => ({
-          windows: {
-            ...state.windows,
-            [window.id]: {
-              ...window,
-              zIndex: nextZIndex,
-            },
-          },
-          activeWindowId: window.id,
-          nextZIndex: nextZIndex + 1,
-        }));
-      },
-
-      updateWindowPosition: (id, position) =>
-        set((state) => ({
-          windows: {
-            ...state.windows,
-            [id]: {
-              ...state.windows[id],
-              position,
-            },
-          },
-        })),
-
-      updateWindowSize: (id, size) =>
-        set((state) => ({
-          windows: {
-            ...state.windows,
-            [id]: {
-              ...state.windows[id],
-              size,
-            },
-          },
-        })),
-
-      updateWindowTitle: (id, title) =>
-        set((state) => ({
-          windows: {
-            ...state.windows,
-            [id]: {
-              ...state.windows[id],
-              title,
-            },
-          },
-        })),
-
-      setActiveWindow: (id) => {
-        const { nextZIndex } = get();
-        set((state) => ({
-          activeWindowId: id,
-          windows: {
-            ...state.windows,
-            [id]: {
-              ...state.windows[id],
-              zIndex: nextZIndex,
-            },
-          },
-          nextZIndex: nextZIndex + 1,
-        }));
-      },
-
-      closeWindow: (id) =>
+      addDesktopIcon: (icon) =>
         set((state) => {
-          const newWindows = { ...state.windows };
-          delete newWindows[id];
-          return {
-            windows: newWindows,
-            activeWindowId: null,
-          };
+          state.desktopIcons[icon.id] = icon;
+          saveDesktopIcons(state.desktopIcons);
         }),
 
-      toggleMyComputer: () =>
-        set((state) => ({
-          isMyComputerVisible: !state.isMyComputerVisible,
-        })),
-
-      setTaskbarOpen: (isOpen) => set({ isTaskbarOpen: isOpen }),
-
-      toggleTaskbar: () =>
-        set((state) => ({
-          isTaskbarOpen: !state.isTaskbarOpen,
-        })),
-
-      addDesktopIcon: (icon) =>
-        set((state) => ({
-          desktopIcons: {
-            ...state.desktopIcons,
-            [icon.id]: icon,
-          },
-        })),
-
       updateDesktopIconPosition: (id, position) =>
-        set((state) => ({
-          desktopIcons: {
-            ...state.desktopIcons,
-            [id]: {
-              ...state.desktopIcons[id],
-              x: position.x,
-              y: position.y,
-            },
-          },
-        })),
+        set((state) => {
+          if (state.desktopIcons[id]) {
+            state.desktopIcons[id].x = position.x;
+            state.desktopIcons[id].y = position.y;
+            saveDesktopIcons(state.desktopIcons);
+          }
+        }),
 
       selectDesktopIcon: (id, isMultiSelect = false) =>
-        set((state) => ({
-          selectedDesktopIcons: isMultiSelect
-            ? state.selectedDesktopIcons.includes(id)
-              ? state.selectedDesktopIcons.filter((i) => i !== id)
-              : [...state.selectedDesktopIcons, id]
-            : [id],
-        })),
+        set((state) => {
+          if (isMultiSelect) {
+            if (state.selectedDesktopIcons.includes(id)) {
+              state.selectedDesktopIcons = state.selectedDesktopIcons.filter(
+                (i) => i !== id
+              );
+            } else {
+              state.selectedDesktopIcons.push(id);
+            }
+          } else {
+            state.selectedDesktopIcons = [id];
+          }
+        }),
 
-      clearDesktopSelection: () => set({ selectedDesktopIcons: [] }),
+      clearDesktopSelection: () =>
+        set((state) => {
+          state.selectedDesktopIcons = [];
+        }),
 
-      setContextMenu: (menu) =>
-        set((state) => ({
-          contextMenu: menu || {
-            show: false,
-            x: 0,
-            y: 0,
-            type: "desktop",
-          },
-          lastRightClickCoords: menu
-            ? { x: menu.x, y: menu.y }
-            : state.lastRightClickCoords,
-        })),
+      setEditingIconId: (id) =>
+        set((state) => {
+          state.editingIconId = id;
+        }),
 
-      setCurrentTime: (time) => set({ currentTime: time }),
-
-      updateWindowMaximizedState: (id, isMaximized, preMaximizeState) =>
-        set((state) => ({
-          windows: {
-            ...state.windows,
-            [id]: {
-              ...state.windows[id],
-              isMaximized,
-              preMaximizeState: isMaximized
-                ? preMaximizeState
-                : state.windows[id].preMaximizeState,
-            },
-          },
-        })),
+      renameDesktopIcon: (id, newLabel) =>
+        set((state) => {
+          if (state.desktopIcons[id]) {
+            state.desktopIcons[id].label = newLabel;
+            state.editingIconId = null;
+            saveDesktopIcons(state.desktopIcons);
+          }
+        }),
 
       addItemToFolder: (folderId, itemId) =>
-        set((state) => ({
-          folderContents: {
-            ...state.folderContents,
-            [folderId]: [...(state.folderContents[folderId] || []), itemId],
-          },
-        })),
+        set((state) => {
+          if (!state.folderContents[folderId]) {
+            state.folderContents[folderId] = [];
+          }
+          if (!state.folderContents[folderId].includes(itemId)) {
+            state.folderContents[folderId].push(itemId);
+            saveFolderContents(state.folderContents);
+          }
+        }),
 
       removeItemFromFolder: (folderId, itemId) =>
-        set((state) => ({
-          folderContents: {
-            ...state.folderContents,
-            [folderId]: state.folderContents[folderId].filter(
-              (id) => id !== itemId
-            ),
-          },
-        })),
+        set((state) => {
+          if (state.folderContents[folderId]) {
+            state.folderContents[folderId] = state.folderContents[
+              folderId
+            ].filter((id) => id !== itemId);
+            saveFolderContents(state.folderContents);
+          }
+        }),
 
       moveItemToFolder: (itemId, targetFolderId) =>
         set((state) => {
           const item = state.desktopIcons[itemId];
-          if (!item) return state;
+          if (!item) return;
 
-          return {
-            desktopIcons: {
-              ...state.desktopIcons,
-              [itemId]: {
-                ...item,
-                parentFolderId: targetFolderId,
-              },
-            },
-          };
+          // Handle removing from previous folder if needed
+          if (
+            item.parentFolderId &&
+            item.parentFolderId in state.folderContents
+          ) {
+            state.folderContents[item.parentFolderId] = state.folderContents[
+              item.parentFolderId
+            ].filter((id) => id !== itemId);
+          }
+
+          // Update the item's parentFolderId
+          state.desktopIcons[itemId].parentFolderId = targetFolderId;
+
+          // Add to target folder if specified
+          if (targetFolderId) {
+            if (!state.folderContents[targetFolderId]) {
+              state.folderContents[targetFolderId] = [];
+            }
+            if (!state.folderContents[targetFolderId].includes(itemId)) {
+              state.folderContents[targetFolderId].push(itemId);
+            }
+          }
+
+          // Save changes
+          saveDesktopIcons(state.desktopIcons);
+          saveFolderContents(state.folderContents);
         }),
 
       getFolderContents: (folderId) => {
@@ -376,98 +414,169 @@ export const useWin95Store = create<Win95State>()(
           .filter(Boolean);
       },
 
-      setClipboard: (type, items) => set({ clipboard: { type, items } }),
-
-      pasteItems: (targetFolderId) => {
-        const state = get();
-        if (!state.clipboard.items.length) return;
-
-        state.clipboard.items.forEach((itemId) => {
-          const item = state.desktopIcons[itemId];
-          if (!item) return;
-
-          if (state.clipboard.type === "cut") {
-            state.moveItemToFolder(itemId, targetFolderId);
-          } else {
-            const newId = `${item.type}-${Date.now()}`;
-            state.addDesktopIcon({
-              ...item,
-              id: newId,
-              parentFolderId: targetFolderId,
-            });
-          }
-        });
-
-        if (state.clipboard.type === "cut") {
-          set({ clipboard: { type: null, items: [] } });
-        }
+      // UI SLICE
+      // -------
+      isTaskbarOpen: false,
+      contextMenu: {
+        show: false,
+        x: 0,
+        y: 0,
+        type: "desktop",
       },
+      currentTime: "",
+      lastRightClickCoords: { x: 0, y: 0 },
+
+      setTaskbarOpen: (isOpen) =>
+        set((state) => {
+          state.isTaskbarOpen = isOpen;
+        }),
+
+      toggleTaskbar: () =>
+        set((state) => {
+          state.isTaskbarOpen = !state.isTaskbarOpen;
+        }),
+
+      setContextMenu: (menu) =>
+        set((state) => {
+          if (menu) {
+            state.contextMenu = menu;
+            state.lastRightClickCoords = { x: menu.x, y: menu.y };
+          } else {
+            state.contextMenu.show = false;
+          }
+        }),
+
+      setCurrentTime: (time) =>
+        set((state) => {
+          state.currentTime = time;
+        }),
+
+      // CLIPBOARD SLICE
+      // -------------
+      clipboard: {
+        type: null,
+        items: [],
+      },
+
+      setClipboard: (type, items) =>
+        set((state) => {
+          state.clipboard.type = type;
+          state.clipboard.items = items;
+        }),
+
+      pasteItems: (targetFolderId) =>
+        set((state) => {
+          const { clipboard, desktopIcons } = state;
+          if (!clipboard.items.length) return;
+
+          clipboard.items.forEach((itemId) => {
+            const item = desktopIcons[itemId];
+            if (!item) return;
+
+            if (clipboard.type === "cut") {
+              // Move the item
+              const sourceFolderId = item.parentFolderId;
+
+              // Update parentFolderId
+              state.desktopIcons[itemId].parentFolderId = targetFolderId;
+
+              // Remove from source folder if needed
+              if (sourceFolderId && state.folderContents[sourceFolderId]) {
+                state.folderContents[sourceFolderId] = state.folderContents[
+                  sourceFolderId
+                ].filter((id) => id !== itemId);
+              }
+
+              // Add to target folder if needed
+              if (targetFolderId) {
+                if (!state.folderContents[targetFolderId]) {
+                  state.folderContents[targetFolderId] = [];
+                }
+                if (!state.folderContents[targetFolderId].includes(itemId)) {
+                  state.folderContents[targetFolderId].push(itemId);
+                }
+              }
+            } else {
+              // Copy the item
+              const newId = `${item.type}-${Date.now()}`;
+              state.desktopIcons[newId] = {
+                ...item,
+                id: newId,
+                parentFolderId: targetFolderId,
+              };
+
+              // Add to target folder if needed
+              if (targetFolderId) {
+                if (!state.folderContents[targetFolderId]) {
+                  state.folderContents[targetFolderId] = [];
+                }
+                state.folderContents[targetFolderId].push(newId);
+              }
+            }
+          });
+
+          // Clear clipboard if it was a cut operation
+          if (clipboard.type === "cut") {
+            state.clipboard.type = null;
+            state.clipboard.items = [];
+          }
+
+          // Save changes
+          saveDesktopIcons(state.desktopIcons);
+          saveFolderContents(state.folderContents);
+        }),
 
       copyItem: (itemId, targetFolderId, newName) =>
         set((state) => {
           const item = state.desktopIcons[itemId];
-          if (!item) return state;
+          if (!item) return;
 
           const newId = `${item.type}-${Date.now()}`;
-          return {
-            desktopIcons: {
-              ...state.desktopIcons,
-              [newId]: {
-                ...item,
-                id: newId,
-                label: newName || item.label,
-                parentFolderId: targetFolderId,
-              },
-            },
-          };
-        }),
-
-      setEditingIconId: (id) => set({ editingIconId: id }),
-
-      renameDesktopIcon: (id, newLabel) =>
-        set((state) => {
-          if (!state.desktopIcons[id]) return state;
-
-          const updatedIcons = {
-            ...state.desktopIcons,
-            [id]: {
-              ...state.desktopIcons[id],
-              label: newLabel,
-            },
+          state.desktopIcons[newId] = {
+            ...item,
+            id: newId,
+            label: newName || item.label,
+            parentFolderId: targetFolderId,
           };
 
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "win95_desktop_icons",
-              JSON.stringify(updatedIcons)
-            );
+          // Add to target folder if needed
+          if (targetFolderId) {
+            if (!state.folderContents[targetFolderId]) {
+              state.folderContents[targetFolderId] = [];
+            }
+            state.folderContents[targetFolderId].push(newId);
           }
 
-          return {
-            desktopIcons: updatedIcons,
-            editingIconId: null,
-          };
+          // Save changes
+          saveDesktopIcons(state.desktopIcons);
+          saveFolderContents(state.folderContents);
         }),
-    }),
+    })),
     {
       name: "win95-storage",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        windows: Object.fromEntries(
-          Object.entries(state.windows).map(([id, window]) => [
-            id,
-            {
-              id: window.id,
-              type: window.type,
-              position: window.position,
-              size: window.size,
-              title: window.title,
-              isMaximized: window.isMaximized,
-              preMaximizeState: window.preMaximizeState,
+        windows: Object.entries(state.windows).reduce(
+          (acc, [id, win]) => ({
+            ...acc,
+            [id]: {
+              id: win.id,
+              type: win.type,
+              position: win.position,
+              size: win.size,
+              title: win.title,
+              isMaximized: win.isMaximized,
+              maximized: win.maximized,
+              minimized: win.minimized,
+              folderId: win.folderId,
+              component: win.component,
+              filename: win.filename,
             },
-          ])
+          }),
+          {}
         ),
         desktopIcons: state.desktopIcons,
+        folderContents: state.folderContents,
         isMyComputerVisible: state.isMyComputerVisible,
       }),
     }
