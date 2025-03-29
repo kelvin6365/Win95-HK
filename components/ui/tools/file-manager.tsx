@@ -110,7 +110,26 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
         filename: fileTitle,
         minimized: false,
         maximized: false,
+        isMaximized: false,
         component: "text-file",
+      });
+      setActiveWindow(newWindowId);
+    } else if (item.type === "paint-file") {
+      // Open paint file in Paint
+      const fileTitle = item.label;
+      const newWindowId = `window-${Date.now()}`;
+      addWindow({
+        id: newWindowId,
+        type: "paint" as WindowType,
+        position: { x: 100, y: 100 },
+        size: { width: 600, height: 450 },
+        title: `Paint - ${fileTitle}`,
+        filename: fileTitle,
+        iconId: itemId,
+        minimized: false,
+        maximized: false,
+        isMaximized: false,
+        component: "paint",
       });
       setActiveWindow(newWindowId);
     }
@@ -428,6 +447,28 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
                   </svg>
                 )}
                 {item.type === "text-file" && <TextFileIcon />}
+                {item.type === "paint-file" && (
+                  <svg width="32" height="32" viewBox="0 0 24 24">
+                    <rect
+                      x="2"
+                      y="2"
+                      width="20"
+                      height="20"
+                      fill="#fff"
+                      stroke="#000"
+                    />
+                    <rect
+                      x="4"
+                      y="4"
+                      width="16"
+                      height="12"
+                      fill="#fff"
+                      stroke="#000"
+                    />
+                    <circle cx="12" cy="10" r="4" fill="#ff0000" />
+                    <rect x="6" y="18" width="12" height="2" fill="#000" />
+                  </svg>
+                )}
                 {item.type === "myComputer" && (
                   <svg width="32" height="32" viewBox="0 0 24 24">
                     <rect

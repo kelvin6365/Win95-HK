@@ -9,6 +9,9 @@ export function Calculator({}: CalculatorProps) {
   const [display, setDisplay] = useState("0");
   const [memory, setMemory] = useState<number | null>(null);
   const [waitingForOperand, setWaitingForOperand] = useState(true);
+  const [lastAnswer, setLastAnswer] = useState<number | null>(null);
+  const [currentOperation, setCurrentOperation] = useState<string | null>(null);
+  const [firstOperand, setFirstOperand] = useState<number | null>(null);
 
   // Handle digit input
   const inputDigit = (digit: string) => {
@@ -36,29 +39,66 @@ export function Calculator({}: CalculatorProps) {
       return;
     }
 
-    setDisplay(display + operator);
+    const currentValue = parseFloat(display);
+
+    if (firstOperand === null) {
+      // First number in calculation
+      setFirstOperand(currentValue);
+    } else if (currentOperation) {
+      // We have a pending operation, calculate it first
+      const result = calculate(firstOperand, currentValue, currentOperation);
+      setFirstOperand(result);
+      setLastAnswer(result);
+      setDisplay(String(result));
+    }
+
+    setCurrentOperation(operator);
     setWaitingForOperand(true);
+  };
+
+  // Calculate function
+  const calculate = (
+    first: number,
+    second: number,
+    operation: string
+  ): number => {
+    switch (operation) {
+      case "+":
+        return first + second;
+      case "-":
+        return first - second;
+      case "*":
+        return first * second;
+      case "/":
+        return second !== 0 ? first / second : NaN;
+      default:
+        return second;
+    }
   };
 
   // Handle calculation
   const performCalculation = () => {
-    if (display.includes("Error") || display === "0") {
+    if (
+      display.includes("Error") ||
+      currentOperation === null ||
+      firstOperand === null
+    ) {
       return;
     }
 
-    try {
-      // Instead of eval, use Function constructor which is slightly safer
-      // Still not recommended for production apps with user input
-      const calculatedValue = new Function(`return ${display}`)();
-      const result = Number.isFinite(calculatedValue)
-        ? String(calculatedValue)
-        : "Error";
-      setDisplay(result);
-      setWaitingForOperand(true);
-    } catch {
+    const secondOperand = parseFloat(display);
+    const result = calculate(firstOperand, secondOperand, currentOperation);
+
+    if (Number.isFinite(result)) {
+      setDisplay(String(result));
+      setLastAnswer(result);
+      // Reset for next calculation
+      setFirstOperand(null);
+      setCurrentOperation(null);
+    } else {
       setDisplay("Error");
-      setWaitingForOperand(true);
     }
+    setWaitingForOperand(true);
   };
 
   // Toggle positive/negative
@@ -101,6 +141,12 @@ export function Calculator({}: CalculatorProps) {
           setWaitingForOperand(true);
         }
         break;
+      case "ANS": // Use last answer
+        if (lastAnswer !== null) {
+          setDisplay(String(lastAnswer));
+          setWaitingForOperand(true);
+        }
+        break;
     }
   };
 
@@ -109,7 +155,9 @@ export function Calculator({}: CalculatorProps) {
     try {
       const value = parseFloat(display);
       if (value >= 0) {
-        setDisplay(String(Math.sqrt(value)));
+        const result = Math.sqrt(value);
+        setDisplay(String(result));
+        setLastAnswer(result);
         setWaitingForOperand(true);
       } else {
         setDisplay("Error");
@@ -123,7 +171,9 @@ export function Calculator({}: CalculatorProps) {
   const calculatePercentage = () => {
     try {
       const value = parseFloat(display);
-      setDisplay(String(value / 100));
+      const result = value / 100;
+      setDisplay(String(result));
+      setLastAnswer(result);
       setWaitingForOperand(true);
     } catch {
       setDisplay("Error");
@@ -135,7 +185,9 @@ export function Calculator({}: CalculatorProps) {
     try {
       const value = parseFloat(display);
       if (value !== 0) {
-        setDisplay(String(1 / value));
+        const result = 1 / value;
+        setDisplay(String(result));
+        setLastAnswer(result);
         setWaitingForOperand(true);
       } else {
         setDisplay("Error");
@@ -149,6 +201,8 @@ export function Calculator({}: CalculatorProps) {
   const clearDisplay = () => {
     setDisplay("0");
     setWaitingForOperand(true);
+    setFirstOperand(null);
+    setCurrentOperation(null);
   };
 
   // Win95-style button class
@@ -178,7 +232,12 @@ export function Calculator({}: CalculatorProps) {
         {/* Calculator buttons arranged like Win95 calculator */}
         <div className="grid grid-cols-5 gap-1">
           {/* First row */}
-          <div className="h-8"></div>
+          <button
+            className={`${win95ButtonClass} text-blue-700`}
+            onClick={() => handleMemory("ANS")}
+          >
+            Ans
+          </button>
           <button
             className={`${win95ButtonClass} text-red-700 font-bold col-span-2`}
             onClick={() =>

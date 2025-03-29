@@ -51,6 +51,7 @@ export interface DesktopIcon {
   type: string;
   parentFolderId?: string;
   contents?: string[];
+  content?: string; // For storing paint file data
 }
 
 // Context menu type

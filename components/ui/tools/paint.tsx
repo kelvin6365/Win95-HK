@@ -1,21 +1,29 @@
 import React, { useEffect, useRef, useState } from "react";
 import "react-resizable/css/styles.css";
+import { useWin95Store } from "@/lib/store";
 
 interface PaintProps {
   windowId: string;
   resizable?: boolean;
   size?: { width: number; height: number };
   onResize?: (size: { width: number; height: number }) => void;
+  filename?: string;
+  iconId?: string;
 }
 
 // Define tool types
 type ToolType = "brush" | "eraser";
+
+// Define menu types
+type MenuType = "file" | "edit" | "view" | "image" | "help";
 
 export function Paint({
   windowId,
   resizable = false,
   size = { width: 500, height: 400 },
   onResize,
+  filename,
+  iconId,
 }: PaintProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,6 +34,173 @@ export function Paint({
   const [activeTool, setActiveTool] = useState<ToolType>("brush");
   const [canvasSize, setCanvasSize] = useState(size);
   const prevSizeRef = useRef(size);
+  const [activeMenu, setActiveMenu] = useState<MenuType | null>(null);
+  const [currentFilename, setCurrentFilename] = useState(filename || "");
+  const addWindow = useWin95Store((state) => state.addWindow);
+  const addDesktopIcon = useWin95Store((state) => state.addDesktopIcon);
+  const desktopIcons = useWin95Store((state) => state.desktopIcons);
+  const updateWindowTitle = useWin95Store((state) => state.updateWindowTitle);
+
+  // Load saved image if filename is provided
+  useEffect(() => {
+    if (filename && canvasRef.current) {
+      // Find the icon with the matching filename and ID
+      const icon = iconId
+        ? desktopIcons[iconId]
+        : Object.values(desktopIcons).find(
+            (icon) => icon.label === filename && icon.type === "paint-file"
+          );
+
+      if (icon && icon.content) {
+        // Load the image data
+        const img = new Image();
+        img.onload = () => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+
+          // Set canvas size to match the container first
+          const container = containerRef.current;
+          if (container) {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+          }
+
+          // Clear the canvas before drawing
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Draw the image at full size
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Save the initial state for undo/redo
+          saveCanvasContent();
+
+          // Update window title
+          updateWindowTitle(windowId, `Paint - ${filename}`);
+          setCurrentFilename(filename);
+        };
+        img.src = icon.content;
+      }
+    }
+  }, [filename, iconId, desktopIcons, windowId, updateWindowTitle]);
+
+  // Save functionality
+  const handleSave = (saveAs: boolean = false) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Convert canvas to base64 data URL
+    const imageData = canvas.toDataURL("image/png");
+
+    // For existing files, if it's not Save As, just update the file directly
+    if (currentFilename && !saveAs) {
+      // Try to find the icon by ID first, then by name if no ID
+      const existingIcon = iconId
+        ? desktopIcons[iconId]
+        : Object.values(desktopIcons).find(
+            (icon) =>
+              icon.label === currentFilename && icon.type === "paint-file"
+          );
+
+      if (existingIcon) {
+        // Update existing icon's content directly
+        const updatedIcon = {
+          ...existingIcon,
+          content: imageData,
+        };
+        addDesktopIcon(updatedIcon);
+
+        // Update window title to reflect the current file
+        updateWindowTitle(windowId, `Paint - ${currentFilename}`);
+        return;
+      }
+    }
+
+    // Only show Save As dialog for new files or when Save As is chosen
+    if (saveAs || !currentFilename) {
+      addWindow({
+        id: `save-dialog-${windowId}`,
+        type: "default",
+        title: "Save As",
+        position: { x: 100, y: 100 },
+        size: { width: 400, height: 300 },
+        component: "save-dialog",
+        content: {
+          message: "Choose a location to save the file:",
+          buttons: [
+            {
+              label: "Save",
+              onClick: () => {
+                // Generate a unique filename if needed
+                let newFilename = saveAs
+                  ? `Copy of ${currentFilename || "Untitled.png"}`
+                  : "Untitled.png";
+                let counter = 1;
+                while (
+                  Object.values(desktopIcons).some(
+                    (icon) =>
+                      icon.label === newFilename && icon.type === "paint-file"
+                  )
+                ) {
+                  const baseName = newFilename
+                    .replace(/\(\d+\)\.png$/, "")
+                    .replace(".png", "");
+                  newFilename = `${baseName}(${counter}).png`;
+                  counter++;
+                }
+
+                // Create a new desktop icon for the saved image
+                const iconId = `paint-${Date.now()}`;
+                const newIcon = {
+                  id: iconId,
+                  x: 24 + (Object.keys(desktopIcons).length % 8) * 74,
+                  y: 24 + Math.floor(Object.keys(desktopIcons).length / 8) * 74,
+                  label: newFilename,
+                  type: "paint-file",
+                  content: imageData,
+                };
+                addDesktopIcon(newIcon);
+
+                // Update current filename and window title
+                setCurrentFilename(newFilename);
+                updateWindowTitle(windowId, `Paint - ${newFilename}`);
+              },
+            },
+            {
+              label: "Cancel",
+              onClick: () => {
+                // Just close the dialog
+              },
+            },
+          ],
+        },
+        isMaximized: false,
+        minimized: false,
+        maximized: false,
+      });
+    }
+  };
+
+  // Menu handling
+  const handleMenuClick = (menu: MenuType) => {
+    setActiveMenu(activeMenu === menu ? null : menu);
+  };
+
+  const handleMenuAction = (action: string) => {
+    switch (action) {
+      case "save":
+        handleSave(false);
+        break;
+      case "save-as":
+        handleSave(true);
+        break;
+      // Add more actions as needed
+    }
+    setActiveMenu(null);
+  };
 
   // Handle window resize events
   useEffect(() => {
@@ -224,23 +399,95 @@ export function Paint({
       onClick={(e) => {
         // Make sure the window receives the click to bring it to front
         e.stopPropagation();
+        // Close menu if clicking outside
+        if (activeMenu) setActiveMenu(null);
       }}
     >
       {/* Menu bar */}
       <div className="bg-[var(--win95-bg)] border-b border-[var(--win95-border-dark)] p-1 text-xs flex">
-        <div className="px-2 hover:bg-[var(--win95-button-highlight)]">
+        <div
+          className={`px-2 ${
+            activeMenu === "file"
+              ? "bg-[var(--win95-button-highlight)]"
+              : "hover:bg-[var(--win95-button-highlight)]"
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleMenuClick("file");
+          }}
+        >
           File
+          {activeMenu === "file" && (
+            <div className="absolute mt-1 -ml-2 bg-[var(--win95-bg)] border-2 border-[var(--win95-border-dark)] shadow-md z-50">
+              <div
+                className="px-4 py-1 hover:bg-[var(--win95-button-highlight)] cursor-default"
+                onClick={() => handleMenuAction("save")}
+              >
+                Save
+              </div>
+              <div
+                className="px-4 py-1 hover:bg-[var(--win95-button-highlight)] cursor-default"
+                onClick={() => handleMenuAction("save-as")}
+              >
+                Save As...
+              </div>
+              <div className="h-[1px] bg-[var(--win95-border-dark)] my-1" />
+              <div className="px-4 py-1 hover:bg-[var(--win95-button-highlight)] cursor-default">
+                Exit
+              </div>
+            </div>
+          )}
         </div>
-        <div className="px-2 hover:bg-[var(--win95-button-highlight)]">
+        <div
+          className={`px-2 ${
+            activeMenu === "edit"
+              ? "bg-[var(--win95-button-highlight)]"
+              : "hover:bg-[var(--win95-button-highlight)]"
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleMenuClick("edit");
+          }}
+        >
           Edit
         </div>
-        <div className="px-2 hover:bg-[var(--win95-button-highlight)]">
+        <div
+          className={`px-2 ${
+            activeMenu === "view"
+              ? "bg-[var(--win95-button-highlight)]"
+              : "hover:bg-[var(--win95-button-highlight)]"
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleMenuClick("view");
+          }}
+        >
           View
         </div>
-        <div className="px-2 hover:bg-[var(--win95-button-highlight)]">
+        <div
+          className={`px-2 ${
+            activeMenu === "image"
+              ? "bg-[var(--win95-button-highlight)]"
+              : "hover:bg-[var(--win95-button-highlight)]"
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleMenuClick("image");
+          }}
+        >
           Image
         </div>
-        <div className="px-2 hover:bg-[var(--win95-button-highlight)]">
+        <div
+          className={`px-2 ${
+            activeMenu === "help"
+              ? "bg-[var(--win95-button-highlight)]"
+              : "hover:bg-[var(--win95-button-highlight)]"
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleMenuClick("help");
+          }}
+        >
           Help
         </div>
       </div>

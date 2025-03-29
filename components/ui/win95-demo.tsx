@@ -42,6 +42,7 @@ import {
   loadSavedWindowState,
   SavedWindowState,
 } from "@/lib/utils/window-persistence";
+import { SaveDialog } from "./dialogs/save-dialog";
 
 export default function Win95Demo() {
   // State to track if the system is ready
@@ -252,6 +253,7 @@ export default function Win95Demo() {
               windowId={windowId}
               resizable={true}
               size={windows[windowId]?.size || { width: 600, height: 450 }}
+              filename={filename}
             />
           );
         case "filemanager":
@@ -269,6 +271,41 @@ export default function Win95Demo() {
         case "my-computer":
           return <MyComputer windowId={windowId} />;
         case "default":
+          if (window.component === "save-dialog") {
+            return (
+              <SaveDialog
+                windowId={windowId}
+                onSave={() => {
+                  if (
+                    window.content &&
+                    typeof window.content === "object" &&
+                    "buttons" in window.content
+                  ) {
+                    const saveButton = window.content.buttons.find(
+                      (btn) => btn.label === "Save"
+                    );
+                    if (saveButton) {
+                      saveButton.onClick();
+                    }
+                  }
+                }}
+                onCancel={() => {
+                  if (
+                    window.content &&
+                    typeof window.content === "object" &&
+                    "buttons" in window.content
+                  ) {
+                    const cancelButton = window.content.buttons.find(
+                      (btn) => btn.label === "Cancel"
+                    );
+                    if (cancelButton) {
+                      cancelButton.onClick();
+                    }
+                  }
+                }}
+              />
+            );
+          }
           // Use DefaultWindow when explicitly requested
           return <DefaultWindow windowId={windowId} title={filename} />;
         default:
@@ -769,6 +806,11 @@ export default function Win95Demo() {
           iconId
         );
         setActiveWindow(windowId);
+      } else if (icon.type === "paint-file") {
+        // Open paint file in Paint
+        console.log(`Opening paint file: ${icon.label}`);
+        const windowId = createWindow("paint", icon.label, icon.label, icon.id);
+        setActiveWindow(windowId);
       }
     },
     [desktopIcons, createWindow, setActiveWindow, windows]
@@ -1205,6 +1247,34 @@ export default function Win95Demo() {
                             fill="none"
                             stroke="#000"
                             strokeWidth="1"
+                          />
+                        </svg>
+                      )}
+                      {icon.type === "paint-file" && (
+                        <svg width="32" height="32" viewBox="0 0 24 24">
+                          <rect
+                            x="2"
+                            y="2"
+                            width="20"
+                            height="20"
+                            fill="#fff"
+                            stroke="#000"
+                          />
+                          <rect
+                            x="4"
+                            y="4"
+                            width="16"
+                            height="12"
+                            fill="#fff"
+                            stroke="#000"
+                          />
+                          <circle cx="12" cy="10" r="4" fill="#ff0000" />
+                          <rect
+                            x="6"
+                            y="18"
+                            width="12"
+                            height="2"
+                            fill="#000"
                           />
                         </svg>
                       )}
