@@ -295,8 +295,8 @@ export const useWin95Store = create<Win95State>()(
       desktopIcons: savedData?.desktopIcons || {
         myComputer: {
           id: "myComputer",
-          x: 24,
-          y: 24,
+          x: 0,
+          y: 0,
           label: "My Computer",
           type: "my-computer",
         },

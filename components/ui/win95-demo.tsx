@@ -36,7 +36,13 @@ import { useWin95Store, WindowType, DesktopIcon } from "@/lib/store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Wallpaper } from "./wallpaper";
 import { cn } from "../../lib/utils";
-import { getDefaultWindowSize } from "@/lib/utils/windows";
+import {
+  findWindowByType,
+  generateWindowId,
+  getDefaultWindowPosition,
+  getDefaultWindowSize,
+  getDefaultWindowTitle,
+} from "@/lib/utils/windows";
 import {
   saveWindowState,
   loadSavedWindowState,
@@ -65,7 +71,48 @@ export default function Win95Demo() {
     .win95-dragging {
       outline: 1px dotted #fff;
     }
+    .grid-cell-highlight {
+      position: absolute;
+      border: 1px dashed rgba(255, 255, 255, 0.3);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .grid-guidelines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 1;
+      display: none;
+    }
+    .show-grid .grid-guidelines {
+      display: block;
+    }
+    .grid-guidelines-horizontal,
+    .grid-guidelines-vertical {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .grid-guidelines-horizontal {
+      height: 1px;
+      left: 0;
+      right: 0;
+    }
+    .grid-guidelines-vertical {
+      width: 1px;
+      top: 0;
+      bottom: 0;
+    }
   `;
+
+  // State for grid highlight
+  const [gridHighlight, setGridHighlight] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [showGrid, setShowGrid] = useState(false);
 
   // Get state and actions from Zustand store
   const {
@@ -123,6 +170,18 @@ export default function Win95Demo() {
 
   // Constants for grid snapping
   const GRID_SIZE = 92; // Size of grid to snap to for Windows 95 authentic look
+
+  // Function to get nearest grid position
+  const getNearestGridPosition = useCallback((x: number, y: number) => {
+    const GRID_X = 94; // Width of an icon + spacing
+    const GRID_Y = 94; // Height of an icon + spacing
+
+    // Calculate nearest grid position
+    const nearestX = Math.round(x / GRID_X) * GRID_X;
+    const nearestY = Math.round(y / GRID_Y) * GRID_Y;
+
+    return { x: nearestX, y: nearestY };
+  }, []);
 
   // Handle loading complete
   const handleLoadingComplete = useCallback(() => {
@@ -361,16 +420,10 @@ export default function Win95Demo() {
       filename?: string,
       folderId?: string
     ) => {
-      const id =
-        type === "default"
-          ? `default-window-${Date.now()}`
-          : `window-${Date.now()}`;
-
-      // Generate a random position
-      const x = 100 + Math.floor(Math.random() * 100);
-      const y = 50 + Math.floor(Math.random() * 100);
-
-      // Set appropriate size based on window type
+      const id = generateWindowId(type);
+      const position = getDefaultWindowPosition(
+        Object.keys(windows).length % 5
+      );
       const size = getDefaultWindowSize(type);
 
       // Add window to store
@@ -378,9 +431,9 @@ export default function Win95Demo() {
         id,
         type,
         isMaximized: false,
-        position: { x, y },
+        position,
         size,
-        title: title || getDefaultTitle(type),
+        title: title || getDefaultWindowTitle(type, filename),
         filename,
         folderId,
         minimized: false,
@@ -394,17 +447,13 @@ export default function Win95Demo() {
       }
 
       // Show status message when creating window
-      updateStatusMessage(`Opened ${title || getDefaultTitle(type)}`);
+      updateStatusMessage(
+        `Opened ${title || getDefaultWindowTitle(type, filename)}`
+      );
 
       return id;
     },
-    [
-      addWindow,
-      getDefaultTitle,
-      isTaskbarOpen,
-      setTaskbarOpen,
-      updateStatusMessage,
-    ]
+    [windows, addWindow, isTaskbarOpen, setTaskbarOpen, updateStatusMessage]
   );
 
   // Desktop icon drag handlers
@@ -476,13 +525,58 @@ export default function Win95Demo() {
     [selectedDesktopIcons, selectDesktopIcon]
   );
 
-  // Handle desktop drop
+  // Handle drag over with grid snapping preview
+  const handleDesktopDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+
+      if (!desktopRef.current) return;
+
+      const rect = desktopRef.current.getBoundingClientRect();
+      let x = Math.max(0, e.clientX - rect.left);
+      let y = Math.max(0, e.clientY - rect.top);
+
+      // Get nearest grid position
+      const nearestPos = getNearestGridPosition(x, y);
+
+      // Update grid highlight position
+      setGridHighlight(nearestPos);
+
+      // Show grid guidelines during drag
+      setShowGrid(true);
+    },
+    [getNearestGridPosition]
+  );
+
+  // Handle drag end
+  const handleDesktopDragEnd = useCallback(() => {
+    // Reset cursor
+    document.body.style.cursor = "default";
+
+    // Reset opacity and remove dragging class from all icons
+    const icons = document.querySelectorAll('[data-was-dragging="true"]');
+    icons.forEach((icon) => {
+      const el = icon as HTMLElement;
+      el.style.opacity = "1";
+      el.classList.remove("win95-dragging");
+      delete el.dataset.wasDragging;
+    });
+
+    // Hide grid highlight and guidelines
+    setGridHighlight(null);
+    setShowGrid(false);
+  }, []);
+
+  // Handle desktop drop with improved grid snapping
   const handleDesktopDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
 
-      // Reset cursor
+      // Reset cursor and grid
       document.body.style.cursor = "default";
+      setGridHighlight(null);
+      setShowGrid(false);
 
       // Get the icon being dragged
       const iconId = e.dataTransfer.getData("desktop-icon");
@@ -540,30 +634,26 @@ export default function Win95Demo() {
       let x = Math.max(0, e.clientX - rect.left);
       let y = Math.max(0, e.clientY - rect.top);
 
-      // Snap to grid
-      x = Math.round(x / GRID_SIZE) * GRID_SIZE;
-      y = Math.round(y / GRID_SIZE) * GRID_SIZE;
+      // Get nearest grid position
+      const nearestPos = getNearestGridPosition(x, y);
+      x = nearestPos.x;
+      y = nearestPos.y;
 
       // Ensure icons don't go too far right or bottom
       if (rect.width && rect.height) {
-        x = Math.min(x, rect.width - 80);
-        y = Math.min(y, rect.height - 80);
+        x = Math.min(x, rect.width - 94);
+        y = Math.min(y, rect.height - 94);
       }
 
-      // Handle dragging from file manager to desktop (remove from folder)
+      // Handle dragging from file manager to desktop
       if (fileItemId) {
         const { moveItemToFolder, removeItemFromFolder } =
           useWin95Store.getState();
         const item = desktopIcons[fileItemId];
 
         if (item && item.parentFolderId) {
-          // First remove from the source folder contents list
           removeItemFromFolder(item.parentFolderId, fileItemId);
-
-          // Then update the item's parent folder reference
           moveItemToFolder(fileItemId, undefined);
-
-          // Notify all file managers to refresh
           window.dispatchEvent(
             new CustomEvent("folderContentsChanged", {
               detail: {
@@ -574,14 +664,12 @@ export default function Win95Demo() {
           );
         }
 
-        // Update the position on the desktop
         updateDesktopIconPosition(fileItemId, { x, y });
         return;
       }
 
-      // Regular desktop icon moving
+      // Regular desktop icon moving with grid snapping
       if (iconId) {
-        // Move all selected icons if we're dragging a selected icon
         if (selectedDesktopIcons.includes(iconId)) {
           const draggedIcon = desktopIcons[iconId];
           const offsetX = x - draggedIcon.x;
@@ -593,10 +681,15 @@ export default function Win95Demo() {
               let newX = icon.x + offsetX;
               let newY = icon.y + offsetY;
 
+              // Snap positions to grid
+              const snappedPos = getNearestGridPosition(newX, newY);
+              newX = snappedPos.x;
+              newY = snappedPos.y;
+
               // Ensure within bounds
               if (rect.width && rect.height) {
-                newX = Math.min(newX, rect.width - 80);
-                newY = Math.min(newY, rect.height - 80);
+                newX = Math.min(newX, rect.width - 94);
+                newY = Math.min(newY, rect.height - 94);
                 newX = Math.max(0, newX);
                 newY = Math.max(0, newY);
               }
@@ -610,110 +703,14 @@ export default function Win95Demo() {
         updateDesktopIconPosition(iconId, { x, y });
       }
     },
-    [GRID_SIZE, desktopIcons, selectedDesktopIcons, updateDesktopIconPosition]
+    [
+      GRID_SIZE,
+      desktopIcons,
+      selectedDesktopIcons,
+      updateDesktopIconPosition,
+      getNearestGridPosition,
+    ]
   );
-
-  // Handle drag over to show proper win95 cursor
-  const handleDesktopDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  }, []);
-
-  // Handle the drag end (in case drop happens outside the desktop)
-  const handleDesktopDragEnd = useCallback(() => {
-    // Reset cursor
-    document.body.style.cursor = "default";
-
-    // Reset opacity and remove dragging class from all icons
-    const icons = document.querySelectorAll('[data-was-dragging="true"]');
-    icons.forEach((icon) => {
-      const el = icon as HTMLElement;
-      el.style.opacity = "1";
-      el.classList.remove("win95-dragging");
-      delete el.dataset.wasDragging;
-    });
-  }, []);
-
-  // Create a new folder on the desktop
-  const createNewFolder = useCallback(() => {
-    // Find a unique folder name
-    let folderNum = 1;
-    let folderName = "New Folder";
-    const existingFolderNames = Object.values(desktopIcons)
-      .filter((icon) => icon.label.startsWith("New Folder"))
-      .map((icon) => icon.label);
-
-    while (existingFolderNames.includes(folderName)) {
-      folderNum++;
-      folderName = folderNum === 1 ? "New Folder" : `New Folder (${folderNum})`;
-    }
-
-    // Generate a unique ID
-    const folderId = `folder-${Date.now()}`;
-
-    // Find a position for the new folder
-    // First try to find an empty spot near the top left
-    let posX = 24;
-    let posY = 24;
-
-    // Check if spot is taken, move to next position if it is
-    const usedPositions = Object.values(desktopIcons).map((icon) => ({
-      x: icon.x,
-      y: icon.y,
-    }));
-
-    const GRID_X = 94; // Width of an icon + spacing
-    const GRID_Y = 94; // Height of an icon + spacing
-    const MAX_COLS = Math.floor(
-      (desktopRef.current?.clientWidth || 800) / GRID_X
-    );
-
-    // Try to find an empty spot in the grid
-    let placed = false;
-    for (let row = 0; row < 10 && !placed; row++) {
-      for (let col = 0; col < MAX_COLS && !placed; col++) {
-        const testX = 24 + col * GRID_X;
-        const testY = 24 + row * GRID_Y;
-
-        // Check if this position is already used
-        const isTaken = usedPositions.some(
-          (pos) => Math.abs(pos.x - testX) < 10 && Math.abs(pos.y - testY) < 10
-        );
-
-        if (!isTaken) {
-          posX = testX;
-          posY = testY;
-          placed = true;
-          break;
-        }
-      }
-    }
-
-    // Create the new folder icon
-    const newFolder: DesktopIcon = {
-      id: folderId,
-      x: posX,
-      y: posY,
-      label: folderName,
-      type: "folder",
-    };
-
-    // Add the folder to desktop
-    addDesktopIcon(newFolder);
-
-    // Select the new folder and enable edit mode
-    setTimeout(() => {
-      selectDesktopIcon(folderId);
-
-      // In a real implementation, you'd now show a text field to rename
-      // For now, we'll just select it to simulate the Windows 95 behavior
-      console.log(
-        `📁 Created new folder: ${folderName} at position (${posX}, ${posY})`
-      );
-    }, 50);
-
-    return folderId;
-  }, [desktopIcons, addDesktopIcon, selectDesktopIcon, desktopRef]);
 
   // Desktop icon click handler
   const handleDesktopIconClick = useCallback(
@@ -964,7 +961,6 @@ export default function Win95Demo() {
     [
       lineUpIcons,
       handleDesktopIconDoubleClick,
-      createNewFolder,
       desktopIcons,
       createWindow,
       setActiveWindow,
@@ -1028,34 +1024,33 @@ export default function Win95Demo() {
     }
   }, [isSystemReady, addWindow, isFirstVisit, setActiveWindow]);
 
-  // Create the My Computer window at startup if needed (but only if no windows exist)
+  // Create the My Computer window at startup if needed
   useEffect(() => {
     if (isSystemReady && isMyComputerVisible) {
       // Check if My Computer window already exists in the windows array
-      const myComputerExists = Object.values(windows).some(
-        (window) => window.type === "my-computer"
-      );
+      const myComputerWindow = findWindowByType(windows, "my-computer");
 
       // Check if we have any windows at all
       const hasAnyWindows = Object.keys(windows).length > 0;
 
-      // Only create if it doesn't exist AND we don't have any windows (avoiding duplicates on startup)
-      if (!myComputerExists && !hasAnyWindows) {
-        // Create a My Computer window with the consistent ID
-        const myComputerId = "my-computer-main";
+      // Only create if it doesn't exist AND we don't have any windows
+      if (!myComputerWindow && !hasAnyWindows) {
+        const myComputerId = generateWindowId("my-computer");
+        const position = getDefaultWindowPosition();
+        const size = getDefaultWindowSize("my-computer");
+
         addWindow({
           id: myComputerId,
           type: "my-computer",
-          position: { x: 80, y: 50 },
-          size: { width: 440, height: 320 },
-          title: "My Computer",
+          position,
+          size,
+          title: getDefaultWindowTitle("my-computer"),
           minimized: false,
           maximized: false,
           isMaximized: false,
           component: "my-computer",
         });
 
-        // Set it as the active window
         setActiveWindow(myComputerId);
       }
     }
@@ -1119,6 +1114,117 @@ export default function Win95Demo() {
     [renameDesktopIcon, setEditingIconId]
   );
 
+  // Start menu My Computer click handler
+  const handleMyComputerClick = useCallback(() => {
+    setTaskbarOpen(false);
+
+    // Check if My Computer window already exists
+    const myComputerWindow = findWindowByType(windows, "my-computer");
+
+    if (myComputerWindow) {
+      // If it exists, just bring it to focus
+      handleWindowFocus(myComputerWindow[0]);
+    } else {
+      // Otherwise create a new one
+      const windowId = generateWindowId("my-computer");
+      const position = getDefaultWindowPosition();
+      const size = getDefaultWindowSize("my-computer");
+
+      addWindow({
+        id: windowId,
+        type: "my-computer",
+        position,
+        size,
+        title: getDefaultWindowTitle("my-computer"),
+        minimized: false,
+        maximized: false,
+        isMaximized: false,
+        component: "my-computer",
+      });
+      handleWindowFocus(windowId);
+      // Ensure visibility flag is set
+      useWin95Store.setState({ isMyComputerVisible: true });
+    }
+  }, [windows, addWindow, handleWindowFocus, setTaskbarOpen]);
+
+  // Create a new folder on the desktop
+  const createNewFolder = useCallback(() => {
+    // Find a unique folder name
+    let folderNum = 1;
+    let folderName = "New Folder";
+    const existingFolderNames = Object.values(desktopIcons)
+      .filter((icon) => icon.label.startsWith("New Folder"))
+      .map((icon) => icon.label);
+
+    while (existingFolderNames.includes(folderName)) {
+      folderNum++;
+      folderName = folderNum === 1 ? "New Folder" : `New Folder (${folderNum})`;
+    }
+
+    // Generate a unique ID
+    const folderId = `folder-${Date.now()}`;
+
+    // Find a position for the new folder
+    // First try to find an empty spot near the top left
+    let posX = 0;
+    let posY = 0;
+
+    // Check if spot is taken, move to next position if it is
+    const usedPositions = Object.values(desktopIcons).map((icon) => ({
+      x: icon.x,
+      y: icon.y,
+    }));
+
+    const GRID_X = 94; // Width of an icon + spacing
+    const GRID_Y = 94; // Height of an icon + spacing
+    const MAX_COLS = Math.floor(
+      ((desktopRef.current?.clientWidth || 800) - 48) / GRID_X
+    );
+
+    // Try to find an empty spot in the grid
+    let placed = false;
+    for (let row = 0; row < 10 && !placed; row++) {
+      for (let col = 0; col < MAX_COLS && !placed; col++) {
+        const testX = col * GRID_X;
+        const testY = row * GRID_Y;
+
+        // Check if this position is already used
+        const isTaken = usedPositions.some(
+          (pos) => Math.abs(pos.x - testX) < 10 && Math.abs(pos.y - testY) < 10
+        );
+
+        if (!isTaken) {
+          posX = testX;
+          posY = testY;
+          placed = true;
+          break;
+        }
+      }
+    }
+
+    // Create the new folder icon
+    const newFolder: DesktopIcon = {
+      id: folderId,
+      x: posX,
+      y: posY,
+      label: folderName,
+      type: "folder",
+    };
+
+    // Add the folder to desktop
+    addDesktopIcon(newFolder);
+
+    // Select the new folder and enable edit mode
+    setTimeout(() => {
+      selectDesktopIcon(folderId);
+      console.log(
+        `📁 Created new folder: ${folderName} at position (${posX}, ${posY})`
+      );
+    }, 50);
+
+    return folderId;
+  }, [desktopIcons, addDesktopIcon, selectDesktopIcon, desktopRef]);
+
   return (
     <div className="relative overflow-hidden w-full h-full">
       {!isSystemReady && isFirstVisit && (
@@ -1130,16 +1236,12 @@ export default function Win95Demo() {
           <div className="flex flex-col h-screen overflow-hidden font-[var(--win95-font)]">
             {/* Desktop area */}
             <div
-              className="flex-1 relative h-[calc(100vh-32px)]"
+              className={cn(
+                `flex-1 relative h-[calc(100vh-32px)]`,
+                showGrid && "show-grid"
+              )}
               ref={desktopRef}
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                // Prevent any window creation
-                (e.nativeEvent as unknown as { __handled: boolean }).__handled =
-                  true;
-                handleDesktopClick(e);
-              }}
+              onClick={handleDesktopClick}
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1162,9 +1264,49 @@ export default function Win95Demo() {
               }}
               onDragOver={handleDesktopDragOver}
               onDrop={handleDesktopDrop}
+              onDragEnd={handleDesktopDragEnd}
             >
               {/* CSS for desktop icons */}
               <style jsx>{desktopIconStyles}</style>
+
+              {/* Grid guidelines */}
+              <div className="grid-guidelines">
+                {Array.from({
+                  length: Math.floor(
+                    (desktopRef.current?.clientHeight || 0) / 94
+                  ),
+                }).map((_, i) => (
+                  <div
+                    key={`h-${i}`}
+                    className="grid-guidelines-horizontal"
+                    style={{ top: `${i * 94}px` }}
+                  />
+                ))}
+                {Array.from({
+                  length: Math.floor(
+                    (desktopRef.current?.clientWidth || 0) / 94
+                  ),
+                }).map((_, i) => (
+                  <div
+                    key={`v-${i}`}
+                    className="grid-guidelines-vertical"
+                    style={{ left: `${i * 94}px` }}
+                  />
+                ))}
+              </div>
+
+              {/* Grid cell highlight */}
+              {gridHighlight && (
+                <div
+                  className="grid-cell-highlight"
+                  style={{
+                    left: `${gridHighlight.x}px`,
+                    top: `${gridHighlight.y}px`,
+                    width: "90px",
+                    height: "84px",
+                  }}
+                />
+              )}
 
               {/* Render desktop icons */}
               {Object.entries(desktopIcons)
@@ -1206,7 +1348,6 @@ export default function Win95Demo() {
                     }}
                     draggable
                     onDragStart={(e) => handleDesktopIconDragStart(e, id)}
-                    onDragEnd={handleDesktopDragEnd}
                   >
                     <div className="w-12 h-12 flex items-center justify-center mb-1 mx-auto">
                       {id === "myComputer" && (
@@ -1483,36 +1624,7 @@ export default function Win95Demo() {
                   {
                     icon: <ComputerIcon />,
                     label: "My Computer",
-                    onClick: () => {
-                      setTaskbarOpen(false);
-
-                      // Check if a My Computer window already exists
-                      const myComputerWindow = Object.entries(windows).find(
-                        ([, win]) => win.type === "my-computer"
-                      );
-
-                      if (myComputerWindow) {
-                        // If it exists, just bring it to focus
-                        handleWindowFocus(myComputerWindow[0]);
-                      } else {
-                        // Otherwise create a new one with consistent ID
-                        const windowId = "my-computer-main";
-                        addWindow({
-                          id: windowId,
-                          type: "my-computer",
-                          position: { x: 80, y: 50 },
-                          size: { width: 440, height: 320 },
-                          title: "My Computer",
-                          minimized: false,
-                          maximized: false,
-                          isMaximized: false,
-                          component: "my-computer",
-                        });
-                        handleWindowFocus(windowId);
-                        // Ensure visibility flag is set
-                        useWin95Store.setState({ isMyComputerVisible: true });
-                      }
-                    },
+                    onClick: handleMyComputerClick,
                   },
                   {
                     divider: true,
