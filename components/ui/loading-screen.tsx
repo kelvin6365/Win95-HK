@@ -83,7 +83,7 @@ export function Win95LoadingScreen({ onComplete }: LoadingScreenProps) {
 
         {/* Made love by @kelvin6365 */}
         <div className="text-white text-xs text-center mt-8">
-          Made love by{" "}
+          Build with ❤️ by{" "}
           <a href="https://github.com/kelvin6365" className="underline">
             kelvin6365
           </a>
