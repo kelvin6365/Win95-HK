@@ -206,6 +206,7 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
         addWindow({
           id: dialogId,
           type: "default" as WindowType,
+          isMaximized: false,
           position: { x: 200, y: 150 },
           size: { width: 400, height: 150 },
           title: "File Already Exists",
