@@ -995,7 +995,7 @@ export default function Win95Demo() {
           position: win.position,
           size: win.size,
           title: win.title,
-          isMaximized: win.isMinimized,
+          isMaximized: win.isMinimized || false,
           folderId: win.currentFolderId,
           minimized: false,
           maximized: win.isMinimized || false,
@@ -1020,6 +1020,7 @@ export default function Win95Demo() {
           title: "Desktop",
           minimized: false,
           maximized: false,
+          isMaximized: false,
           component: "explorer",
         });
         setActiveWindow(explorerWindowId);
@@ -1050,6 +1051,7 @@ export default function Win95Demo() {
           title: "My Computer",
           minimized: false,
           maximized: false,
+          isMaximized: false,
           component: "my-computer",
         });
 
@@ -1503,6 +1505,7 @@ export default function Win95Demo() {
                           title: "My Computer",
                           minimized: false,
                           maximized: false,
+                          isMaximized: false,
                           component: "my-computer",
                         });
                         handleWindowFocus(windowId);
