@@ -125,7 +125,6 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
         size: { width: 600, height: 450 },
         title: `Paint - ${fileTitle}`,
         filename: fileTitle,
-        iconId: itemId,
         minimized: false,
         maximized: false,
         isMaximized: false,
