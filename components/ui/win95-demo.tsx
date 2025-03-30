@@ -377,6 +377,7 @@ export default function Win95Demo() {
       addWindow({
         id,
         type,
+        isMaximized: false,
         position: { x, y },
         size,
         title: title || getDefaultTitle(type),
