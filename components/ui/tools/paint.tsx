@@ -542,7 +542,7 @@ export function Paint({
           </button>
         </div>
 
-        <div className="h-6 border-l border-[var(--win95-border-dark)] border-r border-[var(--win95-border-light)] mx-1"></div>
+        <div className="h-6 border-l dark:border-[var(--win95-border-dark)] border-r border-[var(--win95-border-light)] mx-1"></div>
 
         <div className="flex gap-1">
           {colorOptions.map((colorOption) => (
@@ -564,7 +564,7 @@ export function Paint({
           ))}
         </div>
 
-        <div className="h-6 border-l border-[var(--win95-border-dark)] border-r border-[var(--win95-border-light)] mx-1"></div>
+        <div className="h-6 border-l dark:border-[var(--win95-border-dark)] border-r border-[var(--win95-border-light)] mx-1"></div>
 
         <div className="flex gap-1 items-center">
           <span className="text-xs font-bold mr-1">Size:</span>
