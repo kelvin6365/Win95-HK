@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-interface MenuBarProps extends React.HTMLAttributes<HTMLDivElement> {}
+export type MenuBarProps = React.HTMLAttributes<HTMLDivElement>;
 
 export function MenuBar({ className, ...props }: MenuBarProps) {
   return (
@@ -53,7 +53,7 @@ export function MenuItem({
   );
 }
 
-interface MenuListProps extends React.HTMLAttributes<HTMLDivElement> {}
+export type MenuListProps = React.HTMLAttributes<HTMLDivElement>;
 
 export function MenuList({ children, className, ...props }: MenuListProps) {
   return (

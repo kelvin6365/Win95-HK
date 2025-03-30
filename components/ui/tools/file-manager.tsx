@@ -361,6 +361,7 @@ export function FileManager({ windowId, folderId }: FileManagerProps) {
         handleFolderUpdate as EventListener
       );
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFolderId]);
 
   return (

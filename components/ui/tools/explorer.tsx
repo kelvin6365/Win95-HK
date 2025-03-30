@@ -7,7 +7,7 @@ interface ExplorerProps {
   resizable?: boolean;
 }
 
-export function Explorer({ windowId, resizable = false }: ExplorerProps) {
+export function Explorer({ windowId }: ExplorerProps) {
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<
     "large" | "small" | "list" | "details"

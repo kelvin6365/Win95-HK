@@ -1,8 +1,8 @@
 "use client";
 
-import React, { forwardRef, ReactNode } from "react";
-import { cn } from "@/lib/utils";
 import { useWin95Store } from "@/lib/store";
+import { cn } from "@/lib/utils";
+import React, { ReactNode } from "react";
 
 interface TaskbarProps {
   onStartClick: () => void;

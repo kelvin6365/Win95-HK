@@ -122,7 +122,7 @@ export default function Win95Demo() {
   const desktopRef = useRef<HTMLDivElement>(null);
 
   // Constants for grid snapping
-  const GRID_SIZE = 72; // Size of grid to snap to for Windows 95 authentic look
+  const GRID_SIZE = 92; // Size of grid to snap to for Windows 95 authentic look
 
   // Handle loading complete
   const handleLoadingComplete = useCallback(() => {
@@ -661,8 +661,8 @@ export default function Win95Demo() {
       y: icon.y,
     }));
 
-    const GRID_X = 74; // Width of an icon + spacing
-    const GRID_Y = 74; // Height of an icon + spacing
+    const GRID_X = 94; // Width of an icon + spacing
+    const GRID_Y = 94; // Height of an icon + spacing
     const MAX_COLS = Math.floor(
       (desktopRef.current?.clientWidth || 800) / GRID_X
     );
@@ -959,6 +959,7 @@ export default function Win95Demo() {
           break;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       lineUpIcons,
       handleDesktopIconDoubleClick,
@@ -1169,7 +1170,7 @@ export default function Win95Demo() {
                   <div
                     key={id}
                     data-icon-id={id}
-                    className={`absolute w-[70px] flex flex-col items-center justify-start ${
+                    className={`absolute w-[90px] flex flex-col items-center justify-start ${
                       selectedDesktopIcons.includes(id)
                         ? "bg-[#000080] text-white"
                         : "text-white"
@@ -1179,7 +1180,7 @@ export default function Win95Demo() {
                       top: `${icon.y}px`,
                       cursor: "pointer",
                       padding: "2px",
-                      height: "64px",
+                      height: "84px",
                     }}
                     onClick={(e) => handleDesktopIconClick(e, id)}
                     onDoubleClick={() => handleDesktopIconDoubleClick(id)}
@@ -1204,9 +1205,9 @@ export default function Win95Demo() {
                     onDragStart={(e) => handleDesktopIconDragStart(e, id)}
                     onDragEnd={handleDesktopDragEnd}
                   >
-                    <div className="w-8 h-8 flex items-center justify-center mb-1 mx-auto">
+                    <div className="w-12 h-12 flex items-center justify-center mb-1 mx-auto">
                       {id === "myComputer" && (
-                        <svg width="32" height="32" viewBox="0 0 24 24">
+                        <svg width="48" height="48" viewBox="0 0 24 24">
                           <rect
                             x="2"
                             y="3"
@@ -1235,7 +1236,7 @@ export default function Win95Demo() {
                       )}
                       {icon.type === "text-file" && <TextFileIcon size="lg" />}
                       {icon.type === "folder" && (
-                        <svg width="32" height="32" viewBox="0 0 24 24">
+                        <svg width="48" height="48" viewBox="0 0 24 24">
                           <path
                             d="M2,5 L9,5 L11,7 L22,7 L22,20 L2,20 Z"
                             fill="#fceb74"
@@ -1251,7 +1252,7 @@ export default function Win95Demo() {
                         </svg>
                       )}
                       {icon.type === "paint-file" && (
-                        <svg width="32" height="32" viewBox="0 0 24 24">
+                        <svg width="48" height="48" viewBox="0 0 24 24">
                           <rect
                             x="2"
                             y="2"

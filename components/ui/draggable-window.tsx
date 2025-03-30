@@ -302,6 +302,7 @@ export const DraggableWindow = forwardRef<
       maximize,
       restore,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       onFocus,
       updateWindowPosition,

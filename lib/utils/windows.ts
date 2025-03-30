@@ -8,6 +8,7 @@ export function findWindowByType(
   windows: Record<string, WindowState>,
   type: WindowType
 ): [string, WindowState] | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return Object.entries(windows).find(([_, window]) => window.type === type);
 }
 

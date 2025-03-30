@@ -9,7 +9,7 @@ interface SaveDialogProps {
 
 export function SaveDialog({ windowId, onSave, onCancel }: SaveDialogProps) {
   const [filename, setFilename] = useState("untitled.png");
-  const [selectedFolder, setSelectedFolder] = useState("C:\\My Documents");
+  const [selectedFolder] = useState("C:\\My Documents");
   const closeWindow = useWin95Store((state) => state.closeWindow);
 
   const handleSave = () => {
