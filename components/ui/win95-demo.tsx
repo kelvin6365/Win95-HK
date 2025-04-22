@@ -267,24 +267,6 @@ export default function Win95Demo() {
     [closeWindow, windows]
   );
 
-  // Get the default title for a window type
-  const getDefaultTitle = useCallback((type: WindowType) => {
-    switch (type) {
-      case "notepad":
-        return "Untitled - Notepad";
-      case "calculator":
-        return "Calculator";
-      case "explorer":
-        return "Windows Explorer";
-      case "paint":
-        return "Untitled - Paint";
-      case "filemanager":
-        return "File Manager";
-      default:
-        return "Window";
-    }
-  }, []);
-
   // Get window content function based on window type
   const getWindowContent = useCallback(
     (type: WindowType, windowId: string, filename?: string) => {
@@ -534,8 +516,8 @@ export default function Win95Demo() {
       if (!desktopRef.current) return;
 
       const rect = desktopRef.current.getBoundingClientRect();
-      let x = Math.max(0, e.clientX - rect.left);
-      let y = Math.max(0, e.clientY - rect.top);
+      const x = Math.max(0, e.clientX - rect.left);
+      const y = Math.max(0, e.clientY - rect.top);
 
       // Get nearest grid position
       const nearestPos = getNearestGridPosition(x, y);
@@ -703,6 +685,7 @@ export default function Win95Demo() {
         updateDesktopIconPosition(iconId, { x, y });
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       GRID_SIZE,
       desktopIcons,
