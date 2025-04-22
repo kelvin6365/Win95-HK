@@ -1,7 +1,6 @@
 # Win95-HK
 
 <div align="center">
-  <img src="public/win95-hk-logo.png" alt="Win95-HK Logo" width="200" height="200" />
   <h3>A nostalgic Windows 95 experience with Hong Kong influences</h3>
 </div>
 
