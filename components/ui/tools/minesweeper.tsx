@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import React, { useCallback, useEffect, useState } from "react";
 import { useWin95Store } from "../../../lib/store";
+import { trackGameEvent, trackUIInteraction } from "@/lib/analytics";
 
 interface Cell {
   isMine: boolean;
@@ -138,6 +139,9 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
     setTime(0);
     setTimerActive(false);
     setFaceState("smile");
+
+    // Track game start/restart
+    trackGameEvent("minesweeper", "restart", difficulty);
   }, [difficulty, customSettings]);
 
   // Start timer when first cell is revealed
@@ -163,6 +167,10 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
   // Initialize game on mount or when difficulty changes
   useEffect(() => {
     initializeGame();
+    // Track initial game start only on mount
+    if (difficulty === "beginner") {
+      trackGameEvent("minesweeper", "start", difficulty);
+    }
   }, [initializeGame, difficulty]);
 
   // Handle difficulty change
@@ -170,9 +178,13 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
     setDifficulty(newDifficulty);
     setShowDifficultyMenu(false);
 
+    // Track difficulty change
+    trackGameEvent("minesweeper", "difficulty_change", newDifficulty);
+
     // If custom was selected, show the custom dialog
     if (newDifficulty === "custom") {
       setShowCustomDialog(true);
+      trackUIInteraction("minesweeper", "click", "custom_difficulty");
     }
   };
 
@@ -194,6 +206,7 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
 
     setCustomSettings({ rows: validRows, cols: validCols, mines: validMines });
     setShowCustomDialog(false);
+    trackUIInteraction("minesweeper", "click", "custom_difficulty");
   };
 
   // Reveal cell function
@@ -235,6 +248,10 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
       setGameStatus("lost");
       setFaceState("dead");
       setTimerActive(false);
+
+      // Track game loss
+      trackGameEvent("minesweeper", "lose", difficulty, time);
+
       return;
     }
 
@@ -326,6 +343,9 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
       }
       setGrid(winGrid);
       setFlagsPlaced(minesCount);
+
+      // Track game win
+      trackGameEvent("minesweeper", "win", difficulty, time);
     }
   };
 
@@ -343,6 +363,7 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
   // Handle face button click (restart game)
   const handleFaceClick = () => {
     initializeGame();
+    trackUIInteraction("minesweeper", "click", "restart_face");
   };
 
   // Handle mouse down on cell
@@ -665,6 +686,7 @@ export function Minesweeper({ windowId }: MinesweeperProps) {
           onClick={() => {
             setShowDifficultyMenu(false);
             closeWindow(windowId);
+            trackGameEvent("minesweeper", "exit", difficulty, time);
           }}
         >
           Exit

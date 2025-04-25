@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { trackUIInteraction } from "../../lib/analytics";
 
 export interface StartMenuItem {
   icon?: React.ReactNode;
@@ -76,6 +77,7 @@ const StartMenu = React.forwardRef<HTMLDivElement, StartMenuProps>(
                         "bg-[var(--win95-titlebar)] text-[var(--win95-titlebar-fg)]"
                     )}
                     onClick={() => {
+                      trackUIInteraction("start-menu", "click", item.label);
                       if (item.submenu?.length) {
                         setExpandedItem(expandedItem === index ? null : index);
                       } else {

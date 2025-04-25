@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
+import { trackUIInteraction } from "./analytics";
 
 // Define window types
 export type WindowType =
@@ -230,6 +231,7 @@ export const useWin95Store = create<Win95State>()(
           };
           state.activeWindowId = window.id;
           state.nextZIndex = nextZIndex + 1;
+          trackUIInteraction("window", "open", window.type);
         }),
 
       updateWindowPosition: (id, position) =>
@@ -237,6 +239,7 @@ export const useWin95Store = create<Win95State>()(
           if (state.windows[id]) {
             state.windows[id].position = position;
           }
+          trackUIInteraction("window", "drag", id);
         }),
 
       updateWindowSize: (id, size) =>
@@ -244,6 +247,7 @@ export const useWin95Store = create<Win95State>()(
           if (state.windows[id]) {
             state.windows[id].size = size;
           }
+          trackUIInteraction("window", "resize", id);
         }),
 
       updateWindowTitle: (id, title) =>
@@ -271,6 +275,7 @@ export const useWin95Store = create<Win95State>()(
             if (state.activeWindowId === id) {
               state.activeWindowId = null;
             }
+            trackUIInteraction("window", "close", id);
           }
         }),
 
@@ -289,6 +294,7 @@ export const useWin95Store = create<Win95State>()(
               state.windows[id].preMaximizeState = preMaximizeState;
             }
           }
+          trackUIInteraction("window", "resize", id);
         }),
 
       // DESKTOP SLICE
