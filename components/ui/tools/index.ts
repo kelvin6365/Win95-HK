@@ -5,3 +5,4 @@ export * from "./notepad";
 export * from "./paint";
 export * from "./file-manager";
 export * from "./calculator";
+export * from "./minesweeper";

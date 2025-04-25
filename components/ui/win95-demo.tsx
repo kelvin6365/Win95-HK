@@ -1,9 +1,22 @@
 "use client";
+import { Win95ContextMenu } from "@/components/ui/context-menu";
 import {
   DraggableWindow,
   DraggableWindowRef,
 } from "@/components/ui/draggable-window";
+import { Win95LoadingScreen } from "@/components/ui/loading-screen";
+import { StartMenu } from "@/components/ui/start-menu";
 import { Taskbar, TaskbarItem } from "@/components/ui/taskbar";
+import { TextFileIcon } from "@/components/ui/text-file-icon";
+import {
+  Calculator,
+  DefaultWindow,
+  FileManager,
+  Minesweeper,
+  MyComputer,
+  Notepad,
+  Paint,
+} from "@/components/ui/tools";
 import {
   CalculatorIcon,
   ComputerIcon,
@@ -12,6 +25,7 @@ import {
   ExplorerIcon,
   FindIcon,
   HelpIcon,
+  MinesweeperIcon,
   MsDosIcon,
   NotepadIcon,
   PaintIcon,
@@ -20,22 +34,12 @@ import {
   SettingsIcon,
   ShutdownIcon,
 } from "@/components/ui/win95-icons";
-import { Win95ContextMenu } from "@/components/ui/context-menu";
-import { Win95LoadingScreen } from "@/components/ui/loading-screen";
-import { StartMenu } from "@/components/ui/start-menu";
-import { TextFileIcon } from "@/components/ui/text-file-icon";
+import { DesktopIcon, useWin95Store, WindowType } from "@/lib/store";
 import {
-  Calculator,
-  DefaultWindow,
-  FileManager,
-  MyComputer,
-  Notepad,
-  Paint,
-} from "@/components/ui/tools";
-import { useWin95Store, WindowType, DesktopIcon } from "@/lib/store";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Wallpaper } from "./wallpaper";
-import { cn } from "../../lib/utils";
+  loadSavedWindowState,
+  SavedWindowState,
+  saveWindowState,
+} from "@/lib/utils/window-persistence";
 import {
   findWindowByType,
   generateWindowId,
@@ -43,12 +47,10 @@ import {
   getDefaultWindowSize,
   getDefaultWindowTitle,
 } from "@/lib/utils/windows";
-import {
-  saveWindowState,
-  loadSavedWindowState,
-  SavedWindowState,
-} from "@/lib/utils/window-persistence";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "../../lib/utils";
 import { SaveDialog } from "./dialogs/save-dialog";
+import { Wallpaper } from "./wallpaper";
 
 export default function Win95Demo() {
   // State to track if the system is ready
@@ -311,6 +313,8 @@ export default function Win95Demo() {
           );
         case "my-computer":
           return <MyComputer windowId={windowId} />;
+        case "minesweeper":
+          return <Minesweeper windowId={windowId} />;
         case "default":
           if (window.component === "save-dialog") {
             return (
@@ -398,7 +402,7 @@ export default function Win95Demo() {
   const createWindow = useCallback(
     (
       type: WindowType,
-      title?: string,
+      title?: string | React.ReactNode,
       filename?: string,
       folderId?: string
     ) => {
@@ -1552,6 +1556,26 @@ export default function Win95Demo() {
                         label: "My Documents",
                         onClick: () => {
                           createWindow("filemanager", "My Documents");
+                          setTaskbarOpen(false);
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    icon: <ProgramsIcon />,
+                    label: "Games",
+                    submenu: [
+                      {
+                        label: "Minesweeper",
+                        icon: <MinesweeperIcon />,
+                        onClick: () => {
+                          createWindow(
+                            "minesweeper",
+                            <div className="flex items-center gap-2">
+                              <MinesweeperIcon />
+                              Minesweeper
+                            </div>
+                          );
                           setTaskbarOpen(false);
                         },
                       },

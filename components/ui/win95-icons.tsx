@@ -1,3 +1,4 @@
+import Image from "next/image";
 import React from "react";
 
 export const ProgramsIcon = () => (
@@ -565,3 +566,9 @@ export const RecycleBinIcon = () => (
     <line x1="10" y1="6" x2="10" y2="12" stroke="#000000" strokeWidth="1" />
   </svg>
 );
+
+export function MinesweeperIcon() {
+  return (
+    <Image src="/minesweeper.png" alt="Minesweeper" width={16} height={16} />
+  );
+}

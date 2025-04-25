@@ -62,6 +62,8 @@ export function getDefaultWindowSize(type: WindowType): {
       return { width: 600, height: 450 };
     case "filemanager":
       return { width: 520, height: 400 };
+    case "minesweeper":
+      return { width: 220, height: 386 };
     default:
       return { width: 400, height: 300 };
   }
@@ -89,6 +91,8 @@ export function getDefaultWindowTitle(
       return "File Manager";
     case "text-file":
       return filename || "Untitled";
+    case "minesweeper":
+      return "Minesweeper";
     case "default":
       return filename || "Window";
     default:

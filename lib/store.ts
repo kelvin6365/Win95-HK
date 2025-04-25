@@ -11,7 +11,8 @@ export type WindowType =
   | "paint"
   | "filemanager"
   | "text-file"
-  | "my-computer";
+  | "my-computer"
+  | "minesweeper";
 
 // Window state interface
 export interface WindowState {
@@ -19,7 +20,7 @@ export interface WindowState {
   type: WindowType;
   position: { x: number; y: number };
   size: { width: number; height: number };
-  title: string;
+  title: string | React.ReactNode;
   zIndex: number;
   filename?: string;
   content?:
