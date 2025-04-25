@@ -2,7 +2,7 @@
 
 import { useWin95Store } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import React, { ReactNode } from "react";
+import React, { ReactNode, useEffect } from "react";
 
 interface TaskbarProps {
   onStartClick: () => void;
@@ -11,7 +11,16 @@ interface TaskbarProps {
 
 export function Taskbar({ onStartClick, taskbarItems }: TaskbarProps) {
   const startButtonRef = React.useRef<HTMLButtonElement>(null);
-  const { isTaskbarOpen, currentTime } = useWin95Store();
+  const { isTaskbarOpen, currentTime, setCurrentTime } = useWin95Store();
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    }, 1000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="h-8 min-h-[32px] border-t-[var(--win95-border-light)] border-t-2 bg-[var(--win95-bg)] flex items-center">
