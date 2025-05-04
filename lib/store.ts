@@ -21,7 +21,7 @@ export interface WindowState {
   type: WindowType;
   position: { x: number; y: number };
   size: { width: number; height: number };
-  title: string | React.ReactNode;
+  title: string;
   zIndex: number;
   filename?: string;
   content?:

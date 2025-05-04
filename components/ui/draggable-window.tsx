@@ -77,7 +77,7 @@ const WIN95_RESIZE_HANDLES = `
 // Component that shows a draggable window
 export interface DraggableWindowProps {
   children: React.ReactNode;
-  title?: string | React.ReactNode;
+  title?: string;
   className?: string;
   style?: React.CSSProperties;
   initialPosition?: { x: number; y: number };

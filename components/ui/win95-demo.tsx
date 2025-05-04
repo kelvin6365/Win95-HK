@@ -402,7 +402,7 @@ export default function Win95Demo() {
   const createWindow = useCallback(
     (
       type: WindowType,
-      title?: string | React.ReactNode,
+      title?: string,
       filename?: string,
       folderId?: string
     ) => {
@@ -1451,6 +1451,7 @@ export default function Win95Demo() {
 
               {/* Windows */}
               {Object.entries(windows).map(([id, window]) => {
+                console.log("window", window);
                 return (
                   <DraggableWindow
                     key={id}
@@ -1569,13 +1570,7 @@ export default function Win95Demo() {
                         label: "Minesweeper",
                         icon: <MinesweeperIcon />,
                         onClick: () => {
-                          createWindow(
-                            "minesweeper",
-                            <div className="flex items-center gap-2">
-                              <MinesweeperIcon />
-                              Minesweeper
-                            </div>
-                          );
+                          createWindow("minesweeper", "Minesweeper");
                           setTaskbarOpen(false);
                         },
                       },

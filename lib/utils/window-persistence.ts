@@ -4,7 +4,7 @@ export interface SavedWindowState {
   type: string;
   position: { x: number; y: number };
   size: { width: number; height: number };
-  title: string | React.ReactNode;
+  title: string;
   isMinimized?: boolean;
   currentFolderId?: string;
 }
